@@ -13,6 +13,7 @@ Debug the Cloud template-production flow in QA while keeping requests, credentia
 - Read `references/api-contract.md` before constructing or interpreting direct-upload init/complete, legacy multipart, make, Poll, or queryResult requests.
 - Read `references/webhook-contract.md` when diagnosing callbacks or verifying signatures.
 - Use `references/openapi.yaml` for schema validation or generated clients.
+- Run `scripts/make_from_local_media.py` with `uv run --script` for end-to-end local image/video or mixed-media tasks instead of rebuilding the COS workflow.
 
 ## Pin the QA boundary
 
@@ -68,10 +69,24 @@ Compute the exact byte size and SHA-256 locally without logging the file content
 
 For every explicitly selected local image or video, regardless of size:
 
-1. Send basename, size, MIME type, and SHA-256 as flat JSON to `/api/rest/mva/out/cloud/upload/init`.
-2. Keep the returned temporary COS credentials in memory only. Do not print, persist, or substitute long-lived COS credentials.
-3. Use a Tencent COS SDK high-level transfer API to upload to the exact returned Bucket, Region, and object key with every required header. Let the SDK choose single PUT or multipart/resumable transfer internally; do not add a client-side size branch. File bytes must go directly to COS, not through the QA gateway.
-4. After COS reports success, send only `upload_id` to `/api/rest/mva/out/cloud/upload/complete`. Require one non-empty `data.files[]` descriptor before `/make`.
+1. Prefer the bundled `scripts/make_from_local_media.py` runner with repeated `--input` values. It accepts images, videos, and mixed inputs.
+2. Send basename, size, MIME type, and SHA-256 as flat JSON to `/api/rest/mva/out/cloud/upload/init`.
+3. Keep the returned temporary COS credentials in memory only. Do not print, persist, or substitute long-lived COS credentials.
+4. Use a Tencent COS SDK high-level transfer API to upload to the exact returned Bucket, Region, and object key with every required header. Let the SDK choose single PUT or multipart/resumable transfer internally; do not add a client-side size branch. File bytes must go directly to COS, not through the QA gateway.
+5. After COS reports success, send only `upload_id` to `/api/rest/mva/out/cloud/upload/complete`. Require one non-empty `data.files[]` descriptor before `/make`.
+
+For an intentional QA production, run:
+
+```bash
+uv run --script scripts/make_from_local_media.py \
+  --input /approved/media/photo.jpg \
+  --input /approved/media/clip.mp4 \
+  --intent "生成一条节奏明快的短片" \
+  --output-dir ./outputs \
+  --wait
+```
+
+The QA runner refuses a different Base URL, reads only `FIREFLY_MVA_QA_API_KEY`, persists no credentials or signed URLs, and downloads the final video only with `--wait`.
 
 Do not fall back to `/api/rest/mva/out/cloud/upload` when direct upload fails. Use its repeated multipart field `files` only for an explicitly requested legacy-compatibility diagnostic. Do not send JSON paths or Base64. Require every legacy result item to contain a non-empty `url`; stop before `/make` if any item reports `url=null` or `error`.
 

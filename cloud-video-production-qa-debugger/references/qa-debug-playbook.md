@@ -103,6 +103,19 @@ Store the full response only in a restricted temporary location when signed URLs
 
 Use this path for all new local-material workflows so media bytes bypass the QA gateway:
 
+Prefer the bundled runner for images, videos, and mixed inputs:
+
+```bash
+uv run --script scripts/make_from_local_media.py \
+  --input /approved/workspace/photo.jpg \
+  --input /approved/workspace/clip.mp4 \
+  --intent 'QA local-media smoke test' \
+  --output-dir ./outputs \
+  --wait
+```
+
+Use the manual sequence below only when diagnosing an individual control-plane step.
+
 1. Compute the exact byte count and SHA-256 from the explicitly selected file.
 2. Send a flat JSON init request to `https://medi-qa.fireflyfusion.cn/api/rest/mva/out/cloud/upload/init` with a unique `X-Request-ID` and the QA API key.
 3. Parse the response in memory. Never print or persist `credentials.tmp_secret_id`, `credentials.tmp_secret_key`, or `credentials.session_token`.
