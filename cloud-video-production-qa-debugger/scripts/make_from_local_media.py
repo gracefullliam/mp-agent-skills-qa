@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
         metavar="PATH",
         help="Explicitly selected local image or video; repeat for mixed inputs.",
     )
-    parser.add_argument("--intent", required=True, help="Production intent sent as user_intent.")
+    parser.add_argument("--intent", help="Production intent sent as user_intent; required unless validating only.")
     parser.add_argument(
         "--base-url",
         help="Environment gateway origin. Required by the production Skill; fixed in the QA Skill.",
@@ -480,6 +480,9 @@ def main() -> int:
             flush=True,
         )
         return 0
+
+    if not args.intent:
+        raise WorkflowError("--intent is required unless --validate-only is used")
 
     api_key = os.environ.get(profile["api_key_env"])
     if not api_key:
