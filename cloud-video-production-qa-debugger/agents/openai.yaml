@@ -1,4 +1,4 @@
 interface:
   display_name: "Cloud Video Production QA Debugger"
-  short_description: "Debug cloud video workflows safely in QA"
-  default_prompt: "Use $cloud-video-production-qa-debugger to diagnose a Cloud video production flow in the QA environment without using production credentials."
+  short_description: "Debug QA cloud video and direct COS uploads"
+  default_prompt: "Use $cloud-video-production-qa-debugger to test a local video through QA direct-to-COS upload and Cloud production without using production credentials."

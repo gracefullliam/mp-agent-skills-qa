@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Firefly Cloud Video Production QA API
-  version: 1.1.0-qa
-  description: QA-only local-material upload and asynchronous Cloud template-production contract. Use a dedicated QA credential and never a production key.
+  version: 1.2.0-qa
+  description: QA-only direct/local-material upload and asynchronous Cloud template-production contract. Use a dedicated QA credential and never a production key.
 servers:
   - url: https://medi-qa.fireflyfusion.cn
     description: Dedicated QA Agent gateway. Do not override with a production origin.
@@ -62,6 +62,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        default:
+          description: Cloud API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/rest/mva/out/cloud/upload/init:
+    post:
+      operationId: initializeCloudDirectUpload
+      summary: Initialize an object-scoped direct COS upload
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DirectUploadInitRequest'
+      responses:
+        '200':
+          description: Temporary object-scoped credentials issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectUploadInitResponse'
+        default:
+          description: Cloud API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/rest/mva/out/cloud/upload/complete:
+    post:
+      operationId: completeCloudDirectUpload
+      summary: Verify and complete a direct COS upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DirectUploadCompleteRequest'
+      responses:
+        '200':
+          description: COS object verified and upload usage completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectUploadCompleteResponse'
         default:
           description: Cloud API error
           content:
@@ -169,6 +217,7 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
+      description: Load only from FIREFLY_MVA_QA_API_KEY; never fall back to a production or generic key variable.
   parameters:
     RequestId:
       name: X-Request-ID
@@ -219,6 +268,103 @@ components:
           pattern: '^[0-9a-fA-F]{64}$'
         error:
           type: string
+    DirectUploadInitRequest:
+      type: object
+      additionalProperties: false
+      required: [filename, size, content_type, content_sha256]
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        size:
+          type: integer
+          exclusiveMinimum: 0
+        content_type:
+          type: string
+          minLength: 1
+          maxLength: 127
+        content_sha256:
+          type: string
+          pattern: '^[0-9a-fA-F]{64}$'
+    DirectUploadCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [upload_id]
+      properties:
+        upload_id:
+          type: string
+          format: uuid
+    TemporaryCosCredentials:
+      type: object
+      additionalProperties: false
+      required: [tmp_secret_id, tmp_secret_key, session_token]
+      properties:
+        tmp_secret_id:
+          type: string
+        tmp_secret_key:
+          type: string
+        session_token:
+          type: string
+    DirectUploadInitResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [upload_id, upload_mode, bucket, region, object_key, part_size_mb, credentials, start_time, expired_time, required_headers, request_id]
+              properties:
+                upload_id:
+                  type: string
+                  format: uuid
+                upload_mode:
+                  type: string
+                  const: cos_sts_multipart
+                bucket:
+                  type: string
+                region:
+                  type: string
+                object_key:
+                  type: string
+                part_size_mb:
+                  type: integer
+                  minimum: 1
+                credentials:
+                  $ref: '#/components/schemas/TemporaryCosCredentials'
+                start_time:
+                  type: integer
+                expired_time:
+                  type: integer
+                required_headers:
+                  type: object
+                  additionalProperties:
+                    type: string
+                request_id:
+                  type: string
+    DirectUploadCompleteResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [upload_id, status, files, request_id]
+              properties:
+                upload_id:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  const: completed
+                files:
+                  type: array
+                  minItems: 1
+                  maxItems: 1
+                  items:
+                    $ref: '#/components/schemas/CloudUploadFileResult'
+                request_id:
+                  type: string
     CloudProductionRequest:
       type: object
       additionalProperties: false
@@ -325,7 +471,7 @@ components:
       properties:
         code:
           type: integer
-          enum: [400100, 401100, 403100, 404100, 405100, 409100, 409101, 409102, 409103, 409104, 413100, 422100, 422101, 429100, 500100, 503100, 503101]
+          enum: [400100, 401100, 403100, 404100, 404101, 405100, 409100, 409101, 409102, 409103, 409104, 409105, 413100, 422100, 422101, 429100, 500100, 503100, 503101]
         data:
           type: object
           additionalProperties: true

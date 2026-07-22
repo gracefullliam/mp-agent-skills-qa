@@ -1,6 +1,6 @@
 ---
 name: cloud-video-production-qa-debugger
-description: Diagnose and exercise the Firefly Cloud Video Production public API in the dedicated QA environment at https://medi-qa.fireflyfusion.cn. Use when checking QA gateway health, QA authentication, local image/video upload, Cloud make/poll/queryResult behavior, idempotency, Webhook delivery, error codes, or a known QA conversation_id. Use only the isolated FIREFLY_MVA_QA_API_KEY credential; never use this skill for production, staging, or a customer production key.
+description: Diagnose and exercise the Firefly Cloud Video Production public API in the dedicated QA environment at https://medi-qa.fireflyfusion.cn. Use when checking QA gateway health, QA authentication, small-file multipart upload, large local video direct-to-COS upload, Cloud make/poll/queryResult behavior, idempotency, Webhook delivery, error codes, or a known QA conversation_id. Use only the isolated FIREFLY_MVA_QA_API_KEY credential; never use this skill for production, staging, or a customer production key.
 ---
 
 # Cloud Video Production QA Debugger
@@ -10,7 +10,7 @@ Debug the Cloud template-production flow in QA while keeping requests, credentia
 ## Load references
 
 - Read `references/qa-debug-playbook.md` before running any QA request.
-- Read `references/api-contract.md` before constructing or interpreting upload, make, Poll, or queryResult requests.
+- Read `references/api-contract.md` before constructing or interpreting multipart upload, direct-upload init/complete, make, Poll, or queryResult requests.
 - Read `references/webhook-contract.md` when diagnosing callbacks or verifying signatures.
 - Use `references/openapi.yaml` for schema validation or generated clients.
 
@@ -47,7 +47,7 @@ Classify the problem before calling an endpoint:
 1. For reachability or gateway failures, call `GET /api/rest/mva/health` first.
 2. For a known `conversation_id`, call `POST /api/rest/mva/out/cloud/queryResult` first because it reads persisted parent-task state without refreshing the renderer.
 3. Use `POST /api/rest/mva/out/cloud/poll` only when downstream render reconciliation is required or the user explicitly asks for current progress.
-4. Upload a local file only when the user explicitly selected it and the current runtime may read it. Upload stores an object even though it does not create a production task.
+4. Initialize or upload a local file only when the user explicitly selected it and the current runtime may read it. Direct-upload init creates an expiring session and returns temporary credentials; multipart or COS upload stores an object even though it does not create a production task.
 5. Call `POST /api/rest/mva/out/cloud/make` only when the user asks to create a QA task or an agreed smoke test requires one. It creates durable QA task state unless the request is an idempotent replay.
 
 Do not probe production as a comparison step.
@@ -64,9 +64,18 @@ Do not probe production as a comparison step.
 
 ### Upload selected local media
 
-Send repeated multipart field `files` to `/api/rest/mva/out/cloud/upload`. Do not send JSON paths or Base64. Require every `data.files[]` item to contain a non-empty `url`; stop before `/make` if any item reports `url=null` or `error`.
+Compute the exact byte size and SHA-256 locally without logging the file content or absolute path.
 
-Map upload `type`, `url`, and `content_sha256` to make `asset_type`, `asset_url`, and `content_sha256`. Generate an `asset_id` that does not reveal the local absolute path.
+For videos and other large files:
+
+1. Send basename, size, MIME type, and SHA-256 as flat JSON to `/api/rest/mva/out/cloud/upload/init`.
+2. Keep the returned temporary COS credentials in memory only. Do not print, persist, or substitute long-lived COS credentials.
+3. Use a Tencent COS SDK multipart/resumable upload to the exact returned Bucket, Region, and object key with the returned part size and every required header. File bytes must go directly to COS, not through the QA gateway.
+4. After COS reports success, send only `upload_id` to `/api/rest/mva/out/cloud/upload/complete`. Require one non-empty `data.files[]` descriptor before `/make`.
+
+Use repeated multipart field `files` on `/api/rest/mva/out/cloud/upload` only for bounded small-file compatibility checks. Do not send JSON paths or Base64. Require every `data.files[]` item to contain a non-empty `url`; stop before `/make` if any item reports `url=null` or `error`.
+
+Map either upload path's `type`, `url`, and `content_sha256` to make `asset_type`, `asset_url`, and `content_sha256`. Generate an `asset_id` that does not reveal the local absolute path.
 
 ### Create and observe a QA task
 
@@ -85,10 +94,12 @@ Inspect HTTP status and body `code`; do not branch on `message` text.
 - `401100`: QA key missing or invalid. Do not try a production key.
 - `403100`: QA key lacks `produce` scope.
 - `404100`: verify QA environment, tenant, and `conversation_id`.
+- `404101`: verify the QA `upload_id` and tenant; do not try a production upload session.
 - `409102`: idempotent replay; continue with the returned task.
 - `409103` or `409104`: terminal failure or cancellation; stop waiting.
+- `409105`: the direct-upload session expired; initialize a new object and upload again.
 - `413100`: reduce upload count, file size, batch size, material count, or tenant usage.
-- `422101`: inspect indexed asset errors; no task was created.
+- `422101`: inspect indexed asset errors or direct-upload size/SHA metadata mismatch; do not call `/make` with an unconfirmed object.
 - `429100`: honor `Retry-After` and preserve the same `outer_request_id`.
 - `500100` or `503xxx`: retain safe trace identifiers and use bounded retry only when the operation remains idempotent.
 
@@ -102,7 +113,8 @@ Report facts and interpretations separately. Include only:
 - `outer_request_id` and `conversation_id` when present
 - HTTP status, body `code`, task `status`, and `current_node`
 - sanitized `data.errors[]`
+- direct `upload_id` and object key only when the QA evidence policy permits them
 - whether the request was read-only, uploaded an object, or created/reused a task
 - the next bounded diagnostic action
 
-Never include the API key, callback secret, request credential headers, full signed URLs, local absolute paths, or raw media.
+Never include the API key, callback secret, temporary COS credentials, request credential headers, full signed URLs, local absolute paths, or raw media.

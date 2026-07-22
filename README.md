@@ -4,7 +4,9 @@
 
 当前包含：
 
-- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、上传本地图片/视频、创建或查询 QA 成片任务、诊断 Poll/queryResult/Webhook 和公共错误码。
+- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、小文件 multipart 上传、大视频 COS 直传、创建或查询 QA 成片任务，并诊断 Poll/queryResult/Webhook 和公共错误码。
+
+当前 QA 候选版本为 `v1.2.0-qa.1`；它用于验证 COS 直传协议，不代表生产环境已经发布该能力。
 
 ## 环境边界
 
@@ -29,7 +31,8 @@ FIREFLY_MVA_QA_API_KEY
 仓库为私有仓库，先确保本机 GitHub 身份有访问权限，然后执行：
 
 ```bash
-npx --yes skills add gracefullliam/mp-agent-skills-qa \
+npx --yes skills add \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.2.0-qa.1 \
   --skill cloud-video-production-qa-debugger \
   --agent codex \
   --global \
@@ -41,6 +44,8 @@ npx --yes skills add gracefullliam/mp-agent-skills-qa \
 ```bash
 npx --yes skills update cloud-video-production-qa-debugger --global --yes
 ```
+
+如果返回 `No installed skills found matching`，说明当前副本没有被 `npx skills` 登记；重新执行上面的固定版本 `skills add`。`skills update` 只更新原安装源，不会自动从一个固定 tag 切换到另一个 QA 版本；升级或回滚时显式替换安装 URL 中的 tag。
 
 安装或更新后，新建一个 Codex 任务以重新加载 Skill。
 
@@ -71,5 +76,7 @@ conversation_id: <qa-conversation-id>
 本地视频：/approved/workspace/clip.mp4
 创作意图：生成一条节奏明快的短片
 ```
+
+对于大视频，Skill 会先调用 `/upload/init`，使用返回的单对象临时凭证直接分片上传腾讯云 COS，再调用 `/upload/complete` 获取 `/make` 所需 URL。素材字节不经过 `https://medi-qa.fireflyfusion.cn` 网关；临时凭证不得打印或落盘。
 
 Skill 不会把 QA 请求切换到生产环境，也不会在 QA Key 失败时尝试生产 Key。

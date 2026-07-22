@@ -40,8 +40,10 @@ Never enable shell tracing. Never use verbose HTTP output because it can expose 
 | 1 | Gateway health | `GET /api/rest/mva/health` | None |
 | 2 | Known task snapshot | `POST /api/rest/mva/out/cloud/queryResult` | Reads persisted state |
 | 3 | Renderer reconciliation | `POST /api/rest/mva/out/cloud/poll` | May refresh render state |
-| 4 | Local-material ingestion | `POST /api/rest/mva/out/cloud/upload` | Stores objects |
-| 5 | End-to-end smoke task | `POST /api/rest/mva/out/cloud/make` | Creates or reuses a task |
+| 4 | Direct-upload initialization | `POST /api/rest/mva/out/cloud/upload/init` | Creates an expiring QA upload session and issues temporary credentials |
+| 5 | Local-material ingestion | COS multipart or `POST /api/rest/mva/out/cloud/upload` | Stores objects |
+| 6 | Direct-upload confirmation | `POST /api/rest/mva/out/cloud/upload/complete` | Verifies the object and records usage once |
+| 7 | End-to-end smoke task | `POST /api/rest/mva/out/cloud/make` | Creates or reuses a task |
 
 Stop after the first layer that explains the failure. Do not create a task merely to diagnose a gateway, credential, or known-task problem.
 
@@ -96,6 +98,41 @@ curl --silent --show-error \
 
 Store the full response only in a restricted temporary location when signed URLs are returned. Inspect a sanitized projection for evidence. Require every file item to have a URL before constructing `/make` input.
 
+### Direct-upload an explicitly selected large video
+
+Use this path when validating that video bytes bypass the QA gateway:
+
+1. Compute the exact byte count and SHA-256 from the explicitly selected file.
+2. Send a flat JSON init request to `https://medi-qa.fireflyfusion.cn/api/rest/mva/out/cloud/upload/init` with a unique `X-Request-ID` and the QA API key.
+3. Parse the response in memory. Never print or persist `credentials.tmp_secret_id`, `credentials.tmp_secret_key`, or `credentials.session_token`.
+4. Configure a Tencent COS SDK with those temporary credentials and upload to the exact returned Bucket, Region, and object key. Use multipart/resumable upload with `part_size_mb`, `Content-Type`, and `x-cos-meta-content-sha256` from `required_headers`.
+5. Discard the credentials as soon as COS finishes. Send `upload_id` to `/upload/complete`, then require one successful `files[]` descriptor.
+
+Init request body:
+
+```json
+{
+  "filename": "clip.mp4",
+  "size": 1073741824,
+  "content_type": "video/mp4",
+  "content_sha256": "<64-hex-sha256>"
+}
+```
+
+Completion is safe to retry after an ambiguous response:
+
+```bash
+curl --silent --show-error \
+  --request POST \
+  'https://medi-qa.fireflyfusion.cn/api/rest/mva/out/cloud/upload/complete' \
+  --header 'Content-Type: application/json' \
+  --header "X-API-Key: ${FIREFLY_MVA_QA_API_KEY}" \
+  --header 'X-Request-ID: qa-debug-upload-complete-001' \
+  --data-binary '{"upload_id":"<qa-upload-id>"}'
+```
+
+Do not use a generic HTTP PUT unless it implements the exact COS authorization, multipart, and metadata rules. Do not widen or replace the returned object key. If init returns `404`/`405`, record that the QA service version does not yet expose direct upload; do not fall back to production for comparison.
+
 ### Create a QA task
 
 Use a new `qa-`-prefixed `outer_request_id` only for an intentional new smoke test. Reuse it for ambiguous retries.
@@ -124,4 +161,4 @@ curl --silent --show-error \
 
 Capture request time, endpoint, safe trace identifiers, HTTP status, body code, task status, current node, and sanitized errors. Record whether the action stored media or created a task.
 
-Do not paste complete upload responses containing signed URLs into tickets. Remove restricted temporary response files after extracting the required URL into the immediate QA request flow. Coordinate unused-object cleanup with the QA storage owner after ambiguous upload retries.
+Do not paste complete upload responses containing temporary credentials or signed URLs into tickets. Prefer in-memory init handling; if a diagnostic tool necessarily writes a restricted response file, delete it immediately after configuring the COS client. Coordinate unused-object and unfinished-multipart cleanup with the QA storage owner after ambiguous upload retries.
