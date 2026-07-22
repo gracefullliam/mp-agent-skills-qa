@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Firefly Cloud Video Production QA API
-  version: 1.2.0-qa
-  description: QA-only direct/local-material upload and asynchronous Cloud template-production contract. Use a dedicated QA credential and never a production key.
+  version: 1.2.1-qa
+  description: QA-only unified direct-to-COS local-material upload and asynchronous Cloud template-production contract. Use a dedicated QA credential and never a production key.
 servers:
   - url: https://medi-qa.fireflyfusion.cn
     description: Dedicated QA Agent gateway. Do not override with a production origin.
@@ -12,7 +12,7 @@ paths:
   /api/rest/mva/out/cloud/upload:
     post:
       operationId: uploadCloudVideoMaterials
-      summary: Upload local image or video materials
+      summary: Diagnose legacy gateway-proxied multipart upload
       parameters:
         - $ref: '#/components/parameters/RequestId'
       requestBody:
@@ -71,7 +71,7 @@ paths:
   /api/rest/mva/out/cloud/upload/init:
     post:
       operationId: initializeCloudDirectUpload
-      summary: Initialize an object-scoped direct COS upload
+      summary: Initialize an object-scoped direct COS upload for any local image or video
       parameters:
         - $ref: '#/components/parameters/RequestId'
       requestBody:

@@ -41,9 +41,10 @@ Never enable shell tracing. Never use verbose HTTP output because it can expose 
 | 2 | Known task snapshot | `POST /api/rest/mva/out/cloud/queryResult` | Reads persisted state |
 | 3 | Renderer reconciliation | `POST /api/rest/mva/out/cloud/poll` | May refresh render state |
 | 4 | Direct-upload initialization | `POST /api/rest/mva/out/cloud/upload/init` | Creates an expiring QA upload session and issues temporary credentials |
-| 5 | Local-material ingestion | COS multipart or `POST /api/rest/mva/out/cloud/upload` | Stores objects |
+| 5 | Local-material ingestion | COS SDK high-level transfer | Stores objects directly in COS; SDK may use single PUT or multipart |
 | 6 | Direct-upload confirmation | `POST /api/rest/mva/out/cloud/upload/complete` | Verifies the object and records usage once |
-| 7 | End-to-end smoke task | `POST /api/rest/mva/out/cloud/make` | Creates or reuses a task |
+| 7 | Legacy upload diagnostic, only when requested | `POST /api/rest/mva/out/cloud/upload` | Stores an object through the gateway |
+| 8 | End-to-end smoke task | `POST /api/rest/mva/out/cloud/make` | Creates or reuses a task |
 
 Stop after the first layer that explains the failure. Do not create a task merely to diagnose a gateway, credential, or known-task problem.
 
@@ -82,9 +83,9 @@ curl --silent --show-error \
   --data-binary '{"conversation_id":"<qa-conversation-id>"}'
 ```
 
-### Upload explicitly selected files
+### Diagnose legacy multipart, only when requested
 
-Let curl generate the multipart boundary. Do not log the command with expanded headers.
+Do not select this path based on file size and do not use it as a fallback when direct upload fails. When an explicit legacy diagnostic is required, let curl generate the multipart boundary and do not log the command with expanded headers.
 
 ```bash
 curl --silent --show-error \
@@ -98,14 +99,14 @@ curl --silent --show-error \
 
 Store the full response only in a restricted temporary location when signed URLs are returned. Inspect a sanitized projection for evidence. Require every file item to have a URL before constructing `/make` input.
 
-### Direct-upload an explicitly selected large video
+### Direct-upload every explicitly selected local image or video
 
-Use this path when validating that video bytes bypass the QA gateway:
+Use this path for all new local-material workflows so media bytes bypass the QA gateway:
 
 1. Compute the exact byte count and SHA-256 from the explicitly selected file.
 2. Send a flat JSON init request to `https://medi-qa.fireflyfusion.cn/api/rest/mva/out/cloud/upload/init` with a unique `X-Request-ID` and the QA API key.
 3. Parse the response in memory. Never print or persist `credentials.tmp_secret_id`, `credentials.tmp_secret_key`, or `credentials.session_token`.
-4. Configure a Tencent COS SDK with those temporary credentials and upload to the exact returned Bucket, Region, and object key. Use multipart/resumable upload with `part_size_mb`, `Content-Type`, and `x-cos-meta-content-sha256` from `required_headers`.
+4. Configure a Tencent COS SDK with those temporary credentials and use one high-level transfer call for both images and videos. Upload to the exact returned Bucket, Region, and object key with `part_size_mb`, `Content-Type`, and `x-cos-meta-content-sha256`; let the SDK decide single PUT or multipart internally.
 5. Discard the credentials as soon as COS finishes. Send `upload_id` to `/upload/complete`, then require one successful `files[]` descriptor.
 
 Init request body:
@@ -131,7 +132,7 @@ curl --silent --show-error \
   --data-binary '{"upload_id":"<qa-upload-id>"}'
 ```
 
-Do not use a generic HTTP PUT unless it implements the exact COS authorization, multipart, and metadata rules. Do not widen or replace the returned object key. If init returns `404`/`405`, record that the QA service version does not yet expose direct upload; do not fall back to production for comparison.
+Do not use a generic HTTP PUT unless it implements the exact COS authorization and metadata rules. Do not widen or replace the returned object key. If init returns `404`/`405`, record that the QA service version does not yet expose direct upload; do not fall back to legacy multipart or production for comparison.
 
 ### Create a QA task
 

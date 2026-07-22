@@ -1,6 +1,6 @@
 ---
 name: cloud-video-production-qa-debugger
-description: Diagnose and exercise the Firefly Cloud Video Production public API in the dedicated QA environment at https://medi-qa.fireflyfusion.cn. Use when checking QA gateway health, QA authentication, small-file multipart upload, large local video direct-to-COS upload, Cloud make/poll/queryResult behavior, idempotency, Webhook delivery, error codes, or a known QA conversation_id. Use only the isolated FIREFLY_MVA_QA_API_KEY credential; never use this skill for production, staging, or a customer production key.
+description: Diagnose and exercise the Firefly Cloud Video Production public API in the dedicated QA environment at https://medi-qa.fireflyfusion.cn. Use when checking QA gateway health, QA authentication, local image/video direct-to-COS upload, legacy multipart compatibility, Cloud make/poll/queryResult behavior, idempotency, Webhook delivery, error codes, or a known QA conversation_id. Use only the isolated FIREFLY_MVA_QA_API_KEY credential; never use this skill for production, staging, or a customer production key.
 ---
 
 # Cloud Video Production QA Debugger
@@ -10,7 +10,7 @@ Debug the Cloud template-production flow in QA while keeping requests, credentia
 ## Load references
 
 - Read `references/qa-debug-playbook.md` before running any QA request.
-- Read `references/api-contract.md` before constructing or interpreting multipart upload, direct-upload init/complete, make, Poll, or queryResult requests.
+- Read `references/api-contract.md` before constructing or interpreting direct-upload init/complete, legacy multipart, make, Poll, or queryResult requests.
 - Read `references/webhook-contract.md` when diagnosing callbacks or verifying signatures.
 - Use `references/openapi.yaml` for schema validation or generated clients.
 
@@ -47,7 +47,7 @@ Classify the problem before calling an endpoint:
 1. For reachability or gateway failures, call `GET /api/rest/mva/health` first.
 2. For a known `conversation_id`, call `POST /api/rest/mva/out/cloud/queryResult` first because it reads persisted parent-task state without refreshing the renderer.
 3. Use `POST /api/rest/mva/out/cloud/poll` only when downstream render reconciliation is required or the user explicitly asks for current progress.
-4. Initialize or upload a local file only when the user explicitly selected it and the current runtime may read it. Direct-upload init creates an expiring session and returns temporary credentials; multipart or COS upload stores an object even though it does not create a production task.
+4. Initialize a direct upload only when the user explicitly selected a local file and the current runtime may read it. Init creates an expiring session and returns temporary credentials; COS upload stores an object even though it does not create a production task. Use legacy multipart only when the user explicitly asks to diagnose that compatibility path.
 5. Call `POST /api/rest/mva/out/cloud/make` only when the user asks to create a QA task or an agreed smoke test requires one. It creates durable QA task state unless the request is an idempotent replay.
 
 Do not probe production as a comparison step.
@@ -66,14 +66,14 @@ Do not probe production as a comparison step.
 
 Compute the exact byte size and SHA-256 locally without logging the file content or absolute path.
 
-For videos and other large files:
+For every explicitly selected local image or video, regardless of size:
 
 1. Send basename, size, MIME type, and SHA-256 as flat JSON to `/api/rest/mva/out/cloud/upload/init`.
 2. Keep the returned temporary COS credentials in memory only. Do not print, persist, or substitute long-lived COS credentials.
-3. Use a Tencent COS SDK multipart/resumable upload to the exact returned Bucket, Region, and object key with the returned part size and every required header. File bytes must go directly to COS, not through the QA gateway.
+3. Use a Tencent COS SDK high-level transfer API to upload to the exact returned Bucket, Region, and object key with every required header. Let the SDK choose single PUT or multipart/resumable transfer internally; do not add a client-side size branch. File bytes must go directly to COS, not through the QA gateway.
 4. After COS reports success, send only `upload_id` to `/api/rest/mva/out/cloud/upload/complete`. Require one non-empty `data.files[]` descriptor before `/make`.
 
-Use repeated multipart field `files` on `/api/rest/mva/out/cloud/upload` only for bounded small-file compatibility checks. Do not send JSON paths or Base64. Require every `data.files[]` item to contain a non-empty `url`; stop before `/make` if any item reports `url=null` or `error`.
+Do not fall back to `/api/rest/mva/out/cloud/upload` when direct upload fails. Use its repeated multipart field `files` only for an explicitly requested legacy-compatibility diagnostic. Do not send JSON paths or Base64. Require every legacy result item to contain a non-empty `url`; stop before `/make` if any item reports `url=null` or `error`.
 
 Map either upload path's `type`, `url`, and `content_sha256` to make `asset_type`, `asset_url`, and `content_sha256`. Generate an `asset_id` that does not reveal the local absolute path.
 

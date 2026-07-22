@@ -4,9 +4,9 @@
 
 当前包含：
 
-- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、小文件 multipart 上传、大视频 COS 直传、创建或查询 QA 成片任务，并诊断 Poll/queryResult/Webhook 和公共错误码。
+- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、统一通过 COS 直传本地图片/视频、创建或查询 QA 成片任务，并诊断旧 multipart、Poll/queryResult/Webhook 和公共错误码。
 
-当前 QA 候选版本为 `v1.2.0-qa.1`；它用于验证 COS 直传协议，不代表生产环境已经发布该能力。
+当前 QA 候选版本为 `v1.2.1-qa.1`；它用于验证本地素材统一 COS 直传协议，不代表生产环境已经发布该能力。
 
 ## 环境边界
 
@@ -32,7 +32,7 @@ FIREFLY_MVA_QA_API_KEY
 
 ```bash
 npx --yes skills add \
-  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.2.0-qa.1 \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.2.1-qa.1 \
   --skill cloud-video-production-qa-debugger \
   --agent codex \
   --global \
@@ -77,6 +77,6 @@ conversation_id: <qa-conversation-id>
 创作意图：生成一条节奏明快的短片
 ```
 
-对于大视频，Skill 会先调用 `/upload/init`，使用返回的单对象临时凭证直接分片上传腾讯云 COS，再调用 `/upload/complete` 获取 `/make` 所需 URL。素材字节不经过 `https://medi-qa.fireflyfusion.cn` 网关；临时凭证不得打印或落盘。
+所有本地图片和视频都统一调用 `/upload/init`，使用返回的单对象临时凭证交给腾讯云 COS SDK 上传，再调用 `/upload/complete` 获取 `/make` 所需 URL。Skill 不按文件大小分支；SDK 可在内部选择单 PUT 或分片。素材字节不经过 `https://medi-qa.fireflyfusion.cn` 网关，临时凭证不得打印或落盘。原 `/upload` 仅用于旧客户端兼容诊断。
 
 Skill 不会把 QA 请求切换到生产环境，也不会在 QA Key 失败时尝试生产 Key。

@@ -2,7 +2,7 @@
 
 ## Contract summary
 
-All requests in this Skill use the fixed QA origin `https://medi-qa.fireflyfusion.cn` and the prefix `/api/rest/mva/out/cloud`. Do not override the origin or reuse this document for production. Task and direct-upload control endpoints accept flat JSON; the small-file compatibility upload accepts multipart form data. Successful responses use:
+All requests in this Skill use the fixed QA origin `https://medi-qa.fireflyfusion.cn` and the prefix `/api/rest/mva/out/cloud`. Do not override the origin or reuse this document for production. All local images and videos use the same direct-to-COS control flow; task and direct-upload control endpoints accept flat JSON. The legacy compatibility upload accepts multipart form data. Successful responses use:
 
 ```json
 {
@@ -27,14 +27,16 @@ The QA service operator issues the QA API Key separately from production and tra
 
 | Method | Path | Purpose | Changes or refreshes task state |
 | --- | --- | --- | --- |
-| POST | `/api/rest/mva/out/cloud/upload` | Upload local image/video files and return make-ready URLs | Stores media but does not create a production task |
+| POST | `/api/rest/mva/out/cloud/upload` | Diagnose legacy gateway-proxied multipart upload | Stores media but does not create a production task; not the default local-file path |
 | POST | `/api/rest/mva/out/cloud/upload/init` | Issue object-scoped temporary COS credentials for direct multipart upload | Creates an expiring upload session; carries no media bytes |
 | POST | `/api/rest/mva/out/cloud/upload/complete` | Verify the COS object and return a make-ready descriptor | Completes upload usage exactly once; creates no production task |
 | POST | `/api/rest/mva/out/cloud/make` | Create an asynchronous Cloud production | Creates a task unless it is an idempotent replay |
 | POST | `/api/rest/mva/out/cloud/poll` | Track progress and actively obtain terminal video status | May refresh downstream render status |
 | POST | `/api/rest/mva/out/cloud/queryResult` | Read persisted parent-task state and final material | No downstream refresh |
 
-## Upload local materials
+## Diagnose legacy multipart upload
+
+This endpoint remains for old clients and explicit compatibility tests. New Skill workflows must not choose it by file size or use it as an automatic fallback after direct-upload failure.
 
 ### Request
 
@@ -84,11 +86,11 @@ The endpoint can return HTTP 200 with per-file partial failures:
 
 Require every requested file to have a non-empty `url`; do not start production from an incomplete batch. The upload endpoint has no idempotency key. Retrying an ambiguous timeout can create an unused stored object.
 
-## Upload large materials directly to COS
+## Upload all local materials directly to COS
 
 ### Initialize
 
-Compute file size and SHA-256 locally, then send metadata only:
+For every local image or video, compute file size and SHA-256 locally, then send metadata only. Do not branch on file size:
 
 ```http
 POST /api/rest/mva/out/cloud/upload/init
@@ -138,7 +140,7 @@ The response contains control data and short-lived credentials, never media byte
 }
 ```
 
-Configure a Tencent COS SDK client with `tmp_secret_id`, `tmp_secret_key`, `session_token`, and `region`. Upload the selected local file directly to the exact returned `bucket/object_key`, using `part_size_mb` and all `required_headers`. Do not change the object key, reuse the credentials for another object, persist credentials, or print them. File bytes travel from the QA client to COS, not to `https://medi-qa.fireflyfusion.cn`.
+Configure a Tencent COS SDK client with `tmp_secret_id`, `tmp_secret_key`, `session_token`, and `region`. Use one high-level transfer workflow for images and videos; the SDK may choose single PUT or multipart internally according to `part_size_mb`. Upload directly to the exact returned `bucket/object_key` with all `required_headers`. Do not change the object key, reuse the credentials for another object, persist credentials, print them, or fall back to gateway multipart. File bytes travel from the QA client to COS, not to `https://medi-qa.fireflyfusion.cn`.
 
 ### Complete
 
