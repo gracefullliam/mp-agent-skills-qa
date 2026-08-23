@@ -4,9 +4,9 @@
 
 当前包含：
 
-- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、统一通过 COS 直传本地图片/视频、创建或查询 QA 成片任务，并诊断旧 multipart、Poll/queryResult/Webhook 和公共错误码。
+- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、统一通过 COS 直传本地图片/视频、创建或查询 QA 成片任务，验证固定 `conversation_id` 的多轮自然语言修改，并诊断旧 multipart、Poll/queryResult/Webhook 和公共错误码。
 
-当前 QA 候选版本为 `v1.3.0-qa.1`；它在统一 COS 直传协议上增加了可直接执行的本地图片/视频/混合素材脚本，不代表生产环境已经发布该能力。
+当前 QA 候选版本为 `v1.4.0-qa.1`；它在统一 COS 直传协议上增加固定公开会话、多内部 Turn、成片后继续修改和并发/幂等 Bad Case，不代表生产环境已经发布该能力。
 
 ## 环境边界
 
@@ -32,7 +32,7 @@ FIREFLY_MVA_QA_API_KEY
 
 ```bash
 npx --yes skills add \
-  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.3.0-qa.1 \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.4.0-qa.1 \
   --skill cloud-video-production-qa-debugger \
   --agent codex \
   --global \
@@ -66,7 +66,7 @@ export FIREFLY_MVA_QA_API_KEY='<qa-produce-key>'
 ```text
 使用 $cloud-video-production-qa-debugger 查询 QA 任务。
 conversation_id: <qa-conversation-id>
-先使用 queryResult；只有需要刷新下游渲染状态时才 Poll。
+需要检查持久化父任务投影时使用 queryResult；需要核验客户可见的当前轮状态和结果时使用 Poll。
 ```
 
 使用本地素材做 QA 冒烟测试：
@@ -75,6 +75,13 @@ conversation_id: <qa-conversation-id>
 使用 $cloud-video-production-qa-debugger 在 QA 环境做一次本地视频成片冒烟测试。
 本地视频：/approved/workspace/clip.mp4
 创作意图：生成一条节奏明快的短片
+```
+
+验证河马泳池多轮场景：
+
+```text
+使用 $cloud-video-production-qa-debugger 按 references/multiturn-hippo-cases.md
+验证同一 conversation_id 下的推荐、模板确认、成片后换模板，以及运行中抢跑和幂等冲突。
 ```
 
 所有本地图片和视频都统一调用 `/upload/init`，使用返回的单对象临时凭证交给腾讯云 COS SDK 上传，再调用 `/upload/complete` 获取 `/make` 所需 URL。Skill 不按文件大小分支；SDK 可在内部选择单 PUT 或分片。素材字节不经过 `https://medi-qa.fireflyfusion.cn` 网关，临时凭证不得打印或落盘。原 `/upload` 仅用于旧客户端兼容诊断。

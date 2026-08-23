@@ -1,6 +1,6 @@
 ---
 name: cloud-video-production-qa-debugger
-description: Diagnose and exercise the Firefly Cloud Video Production public API in the dedicated QA environment at https://medi-qa.fireflyfusion.cn. Use when checking QA gateway health, QA authentication, local image/video direct-to-COS upload, legacy multipart compatibility, Cloud make/poll/queryResult behavior, idempotency, Webhook delivery, error codes, or a known QA conversation_id. Use only the isolated FIREFLY_MVA_QA_API_KEY credential; never use this skill for production, staging, or a customer production key.
+description: Diagnose and exercise the Firefly Cloud Video Production public API in the dedicated QA environment at https://medi-qa.fireflyfusion.cn. Use when checking QA gateway health, QA authentication, local image/video direct-to-COS upload, multi-turn natural-language revisions with one fixed conversation_id, legacy multipart compatibility, Cloud make/poll/queryResult behavior, idempotency, Webhook delivery, error codes, or a known QA conversation_id. Use only the isolated FIREFLY_MVA_QA_API_KEY credential; never use this skill for production, staging, or a customer production key.
 ---
 
 # Cloud Video Production QA Debugger
@@ -11,6 +11,7 @@ Debug the Cloud template-production flow in QA while keeping requests, credentia
 
 - Read `references/qa-debug-playbook.md` before running any QA request.
 - Read `references/api-contract.md` before constructing or interpreting direct-upload init/complete, legacy multipart, make, Poll, or queryResult requests.
+- Read `references/multiturn-hippo-cases.md` before testing continuation, template changes after a completed video, concurrent-turn rejection, or idempotency bad cases.
 - Read `references/webhook-contract.md` when diagnosing callbacks or verifying signatures.
 - Use `references/openapi.yaml` for schema validation or generated clients.
 - Run `scripts/make_from_local_media.py` with `uv run --script` for end-to-end local image/video or mixed-media tasks instead of rebuilding the COS workflow.
@@ -46,8 +47,8 @@ Require the QA key to have `produce` scope. Ask the operator to provision or rot
 Classify the problem before calling an endpoint:
 
 1. For reachability or gateway failures, call `GET /api/rest/mva/health` first.
-2. For a known `conversation_id`, call `POST /api/rest/mva/out/cloud/queryResult` first because it reads persisted parent-task state without refreshing the renderer.
-3. Use `POST /api/rest/mva/out/cloud/poll` only when downstream render reconciliation is required or the user explicitly asks for current progress.
+2. For a known `conversation_id`, call `POST /api/rest/mva/out/cloud/queryResult` first when inspecting persisted parent-task projections.
+3. Use `POST /api/rest/mva/out/cloud/poll` to verify the customer-facing current-turn status and result. Poll reads the latest persisted Turn and does not start new business work.
 4. Initialize a direct upload only when the user explicitly selected a local file and the current runtime may read it. Init creates an expiring session and returns temporary credentials; COS upload stores an object even though it does not create a production task. Use legacy multipart only when the user explicitly asks to diagnose that compatibility path.
 5. Call `POST /api/rest/mva/out/cloud/make` only when the user asks to create a QA task or an agreed smoke test requires one. It creates durable QA task state unless the request is an idempotent replay.
 
@@ -98,6 +99,8 @@ Send a flat JSON body to `/api/rest/mva/out/cloud/make`. Reuse the same `outer_r
 
 Persist `conversation_id`, `outer_request_id`, and `request_id`. Use queryResult for a read-only snapshot and Poll every 3–5 seconds only when active reconciliation is intended. Stop waiting on `completed`, `failed`, or `cancelled`.
 
+The first `/make` response creates one fixed public `conversation_id`. After the current internal Turn reaches `completed`, `failed`, or `cancelled`, submit the user's next natural-language revision to the same `/make` endpoint with that fixed ID, no `assets`, and a new `outer_request_id`. A completed video does not close the conversation. Do not create the next Turn while the current one is `queued` or `running`; expect `409106` and continue Poll instead.
+
 ### Diagnose Webhooks
 
 Verify the HMAC against the unmodified raw body before parsing JSON. Keep the QA callback secret separate from both QA and production API keys. Deduplicate by `event_id`, acknowledge valid deliveries promptly, and use queryResult for reconciliation.
@@ -111,8 +114,9 @@ Inspect HTTP status and body `code`; do not branch on `message` text.
 - `404100`: verify QA environment, tenant, and `conversation_id`.
 - `404101`: verify the QA `upload_id` and tenant; do not try a production upload session.
 - `409102`: idempotent replay; continue with the returned task.
-- `409103` or `409104`: terminal failure or cancellation; stop waiting.
+- `409103` or `409104`: terminal failure or cancellation; stop the current wait. A later natural-language revision may reuse the fixed conversation with a new `outer_request_id`.
 - `409105`: the direct-upload session expired; initialize a new object and upload again.
+- `409106`: the current Turn is still active, the conversation/application does not match, or an idempotency key was reused with different text. Continue Poll for an active Turn; otherwise fix the request without blind retry.
 - `413100`: reduce upload count, file size, batch size, material count, or tenant usage.
 - `422101`: inspect indexed asset errors or direct-upload size/SHA metadata mismatch; do not call `/make` with an unconfirmed object.
 - `429100`: honor `Retry-After` and preserve the same `outer_request_id`.

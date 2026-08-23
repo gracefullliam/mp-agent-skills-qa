@@ -368,29 +368,37 @@ components:
     CloudProductionRequest:
       type: object
       additionalProperties: false
-      required:
-        - assets
+      description: Omit conversation_id and provide assets on the first Turn. After the current internal Turn is completed, failed, or cancelled, reuse the same fixed conversation_id with text user_intent for each later revision; omit assets on later Turns. Do not submit concurrent Turns while the current Turn is queued or running.
       properties:
+        conversation_id:
+          type: string
+          minLength: 1
+          description: Fixed public conversation ID returned by the first Turn; reuse it after each terminal Turn for later natural-language revisions and omit it on the first Turn.
         user_intent:
           oneOf:
             - type: string
+              minLength: 1
               x-truncate-maxLength: 200
             - $ref: '#/components/schemas/UserIntent'
+          description: Optional on the first Turn; a non-blank text string is required on later Turns.
         assets:
           type: array
           minItems: 1
           items:
             $ref: '#/components/schemas/Asset'
+          description: Required on the first Turn and forbidden on later Turns.
         outer_request_id:
           type: string
         callback_url:
           type: string
           format: uri
+          description: First Turn only.
         callback_events:
           type: array
           uniqueItems: true
           items:
             $ref: '#/components/schemas/CallbackEvent'
+          description: First Turn only; requires callback_url.
     UserIntent:
       type: object
       additionalProperties: false

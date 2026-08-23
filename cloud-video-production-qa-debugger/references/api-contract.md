@@ -13,7 +13,7 @@ All requests in this Skill use the fixed QA origin `https://medi-qa.fireflyfusio
 }
 ```
 
-Clients must branch on `code`. `message` is diagnostic text and may change.
+Clients must branch on `code`. `message` is diagnostic text and may change. The first `/make` response creates one fixed public `conversation_id`; every later `/make`, `/poll`, and `/queryResult` reuses that value while the service keeps internal Turn IDs private.
 
 ## Authentication and common headers
 
@@ -30,8 +30,8 @@ The QA service operator issues the QA API Key separately from production and tra
 | POST | `/api/rest/mva/out/cloud/upload` | Diagnose legacy gateway-proxied multipart upload | Stores media but does not create a production task; not the default local-file path |
 | POST | `/api/rest/mva/out/cloud/upload/init` | Issue object-scoped temporary COS credentials for direct multipart upload | Creates an expiring upload session; carries no media bytes |
 | POST | `/api/rest/mva/out/cloud/upload/complete` | Verify the COS object and return a make-ready descriptor | Completes upload usage exactly once; creates no production task |
-| POST | `/api/rest/mva/out/cloud/make` | Create an asynchronous Cloud production | Creates a task unless it is an idempotent replay |
-| POST | `/api/rest/mva/out/cloud/poll` | Track progress and actively obtain terminal video status | May refresh downstream render status |
+| POST | `/api/rest/mva/out/cloud/make` | Submit the first or a later natural-language Cloud production Turn | Creates an internal Turn unless it is an idempotent replay; the public conversation remains fixed |
+| POST | `/api/rest/mva/out/cloud/poll` | Track the current Turn and obtain its terminal result | Resolves and reads the latest persisted internal Turn without starting new work |
 | POST | `/api/rest/mva/out/cloud/queryResult` | Read persisted parent-task state and final material | No downstream refresh |
 
 ## Diagnose legacy multipart upload
@@ -182,7 +182,7 @@ The service verifies the object using COS `HEAD Object`, including exact `Conten
 
 Repeat completion safely after an ambiguous response; a completed session does not double-count usage. A `404101` means the upload session is unknown to this QA tenant. A `409105` means it expired; initialize a new object and upload again. A `422101` means the COS object is absent or its size/SHA metadata does not match; do not call `/make`.
 
-## Create a production
+## Submit a production Turn
 
 ### Request
 
@@ -211,11 +211,12 @@ POST /api/rest/mva/out/cloud/make
 
 | Field | Type | Required | Contract |
 | --- | --- | --- | --- |
-| `user_intent` | string or object | No | Text, or `{ "text": string, "speech_url": string }`; text is trimmed and truncated to 200 Unicode characters |
-| `assets` | array | Yes | At least one item; the environment may impose an upper limit |
+| `conversation_id` | string | Later Turns only | Omit on the first Turn. Persist the first response value and reuse the same fixed ID on every later Turn |
+| `user_intent` | string or object | Conditional | Optional text/object on the first Turn; a non-blank text string is required on later Turns; text is trimmed and truncated to 200 Unicode characters |
+| `assets` | array | First Turn only | At least one item on the first Turn; omit on later Turns because the service inherits source materials |
 | `outer_request_id` | string | No | Customer-generated idempotency identifier, unique within the customer's tenant |
-| `callback_url` | URL | No | Public HTTPS Webhook endpoint |
-| `callback_events` | string[] | No | Requires `callback_url`; defaults to the three terminal events when omitted |
+| `callback_url` | URL | First Turn only | Public HTTPS Webhook endpoint |
+| `callback_events` | string[] | First Turn only | Requires `callback_url`; defaults to the three terminal events when omitted |
 
 ### `assets[]` fields
 
@@ -232,7 +233,7 @@ POST /api/rest/mva/out/cloud/make
 
 The API accepts no field aliases. In particular, reject `materials`, `item_list`, `material_type`, `source_uri`, `asset_uri`, `url`, `outerRequestId`, `callbackUrl`, and `callbackEvents`.
 
-The service validates asset accessibility before creating a task. A rejected asset returns `422101` and no `conversation_id`.
+The service validates asset accessibility before creating a conversation. A rejected first-Turn asset returns `422101` and no `conversation_id`.
 
 ### Accepted response
 
@@ -250,7 +251,7 @@ The service validates asset accessibility before creating a task. A rejected ass
 }
 ```
 
-`status` may initially be `queued` or `running`. When `outer_request_id` was omitted, the response omits it.
+`status` may initially be `queued` or `running`. When `outer_request_id` was omitted, the response omits it. A later-Turn response repeats the first Turn's fixed `conversation_id`; only the internal Turn changes.
 
 ### Idempotent replay
 
@@ -268,7 +269,7 @@ The service validates asset accessibility before creating a task. A rejected ass
 }
 ```
 
-Although `success` is false, this response identifies the existing accepted task. Continue tracking that `conversation_id`.
+Although `success` is false, this response identifies the existing accepted Turn. Continue tracking that fixed `conversation_id`.
 
 ## Poll a production
 
@@ -323,11 +324,25 @@ Poll every 3–5 seconds. Stop after a terminal state or when the customer cance
 }
 ```
 
-The current Poll contract returns the final `video_url`. Use `queryResult` for the detailed final material and poster projection.
+Poll is the customer-facing current-Turn result. For `outcome=video`, it returns the final `video_url`; for `outcome=recommendation`, it returns the feedback and recommendation fields without a video.
+
+### Recommendation completion and continuation
+
+When `outcome=recommendation` and `execution_readiness=NEED_USER_INPUT`, present `feedback`, `recommendations`, and `template_recommendations`, then forward the user's next message unchanged:
+
+```json
+{
+  "conversation_id": "43a6df89-c48d-4a71-9a71-95013a4109b5",
+  "user_intent": "选择第一个",
+  "outer_request_id": "qa-customer-order-turn-2"
+}
+```
+
+The same protocol also applies after a completed video, failure, or cancellation. The user may keep changing templates, style, pacing, copy, aspect ratio, or another video-production requirement. The service accepts a later Turn only when the current Turn is `completed`, `failed`, or `cancelled`; `queued`/`running` concurrency returns `409106`. Every intentional Turn uses a new `outer_request_id`, while an ambiguous retry of the same Turn reuses the same value and body.
 
 ### Failed response
 
-Production failure returns HTTP 409 with code `409103`; cancellation returns code `409104`. Both include the task identifier, terminal status, current-node fields, and `error_messages`.
+Production failure returns HTTP 409 with code `409103`; cancellation returns code `409104`. Both end only the current Turn and include the fixed conversation identifier, terminal status, current-node fields, and `error_messages`.
 
 ## Query the parent task
 
@@ -382,6 +397,7 @@ When the parent task is completed, `data` additionally contains:
 | `409103` | Production failed | Stop waiting; retain task identifiers and errors for support |
 | `409104` | Production cancelled | Stop waiting |
 | `409105` | Direct upload session expired | Initialize a new object-scoped QA upload and upload again |
+| `409106` | Later-Turn request conflicts with the active conversation or reused idempotency key | Continue Poll if the current Turn is active; otherwise correct the fixed conversation, user text, or idempotency key without blind retry |
 | `413100` | Input or upload limit exceeded | Reduce asset count, upload file count, file size, total batch size, or tenant usage |
 | `422100` | Invalid callback URL | Use an allowed public HTTPS endpoint |
 | `422101` | Asset unavailable | Fix the indexed asset using `data.errors[]` |

@@ -39,7 +39,7 @@ Never enable shell tracing. Never use verbose HTTP output because it can expose 
 | ---: | --- | --- | --- |
 | 1 | Gateway health | `GET /api/rest/mva/health` | None |
 | 2 | Known task snapshot | `POST /api/rest/mva/out/cloud/queryResult` | Reads persisted state |
-| 3 | Renderer reconciliation | `POST /api/rest/mva/out/cloud/poll` | May refresh render state |
+| 3 | Customer-facing current Turn | `POST /api/rest/mva/out/cloud/poll` | Reads the latest persisted Turn; starts no new work |
 | 4 | Direct-upload initialization | `POST /api/rest/mva/out/cloud/upload/init` | Creates an expiring QA upload session and issues temporary credentials |
 | 5 | Local-material ingestion | COS SDK high-level transfer | Stores objects directly in COS; SDK may use single PUT or multipart |
 | 6 | Direct-upload confirmation | `POST /api/rest/mva/out/cloud/upload/complete` | Verifies the object and records usage once |
@@ -170,6 +170,26 @@ curl --silent --show-error \
     "outer_request_id": "qa-debug-<stable-unique-id>"
   }'
 ```
+
+### Continue a QA conversation
+
+Wait until the current Turn is `completed`, `failed`, or `cancelled`. Then reuse the fixed public `conversation_id`, omit `assets`, and send the user's next message with a new `outer_request_id`:
+
+```bash
+curl --silent --show-error \
+  --request POST \
+  'https://medi-qa.fireflyfusion.cn/api/rest/mva/out/cloud/make' \
+  --header 'Content-Type: application/json' \
+  --header "X-API-Key: ${FIREFLY_MVA_QA_API_KEY}" \
+  --header 'X-Request-ID: qa-debug-turn-2' \
+  --data-binary '{
+    "conversation_id": "<fixed-qa-conversation-id>",
+    "user_intent": "换一个更轻快的模板",
+    "outer_request_id": "qa-debug-turn-2-<unique>"
+  }'
+```
+
+Do not submit another message while the current Turn is `queued` or `running`. Use `references/multiturn-hippo-cases.md` for the complete positive and bad-case sequence.
 
 ## Evidence and cleanup
 
