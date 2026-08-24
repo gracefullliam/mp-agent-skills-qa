@@ -3,7 +3,7 @@
 ## 1. 结论
 
 测试日期：2026-08-24  
-本地代码：`/Users/yulin/code/mp-video-agent`，分支 `Lynn-Refeactor`
+本地代码仓库：`mp-video-agent`，分支 `Lynn-Refeactor`
 QA 环境：`https://medi-qa.fireflyfusion.cn`
 
 结论：
