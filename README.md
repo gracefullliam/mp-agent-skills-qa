@@ -6,7 +6,7 @@
 
 - [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、统一通过 COS 直传本地图片/视频、创建或查询 QA 成片任务，并按用户自然语言继续同一个 Cloud 会话。
 
-当前 QA Skill 版本为 `v1.5.0-qa.4`。它与正式用户交互保持一致，唯一固定差异是请求目标为 QA 环境；同时保留常见鉴权、会话进行中、达到轮次上限、幂等、素材校验和服务异常的用户提示规则。
+当前 QA Skill 版本为 `v1.5.0-qa.5`。它与正式用户交互保持一致，唯一固定差异是请求目标为 QA 环境；同时保留常见错误提示规则，并将模板推荐以 `title + previewUrl` 可点击列表展示。
 
 ## 环境边界
 
@@ -32,7 +32,7 @@ FIREFLY_MVA_QA_API_KEY
 
 ```bash
 npx --yes skills add \
-  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.5.0-qa.4 \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.5.0-qa.5 \
   --skill cloud-video-production-qa-debugger \
   --agent codex \
   --global \

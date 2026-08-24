@@ -328,7 +328,7 @@ Poll is the customer-facing current-Turn result. For `outcome=video`, it returns
 
 ### Recommendation completion and continuation
 
-When `outcome=recommendation` and `execution_readiness=NEED_USER_INPUT`, present `feedback`, `recommendations`, and `template_recommendations`, then forward the user's next message unchanged:
+When `outcome=recommendation` and `execution_readiness=NEED_USER_INPUT`, present `feedback`, `recommendations`, and `template_recommendations`, then forward the user's next message unchanged. For user-facing rendering, map each template recommendation to a compact list item containing only `title` and `previewUrl` (source field `preview_url`); render a non-empty `preview_url` as a clickable Markdown “预览视频” link. Do not expose `template_code`, internal scores, or database fields unless the operator explicitly asks for raw diagnostics. If `preview_url` is empty, show “暂无预览” and never fabricate a URL.
 
 ```json
 {
