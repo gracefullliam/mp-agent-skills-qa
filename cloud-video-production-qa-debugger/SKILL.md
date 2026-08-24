@@ -101,6 +101,18 @@ Persist `conversation_id`, `outer_request_id`, and `request_id`. Use queryResult
 
 The first `/make` response creates one fixed public `conversation_id`. After the current internal Turn reaches `completed`, `failed`, or `cancelled`, submit the user's next natural-language revision to the same `/make` endpoint with that fixed ID, no `assets`, and a new `outer_request_id`. A completed video does not close the conversation. Do not create the next Turn while the current one is `queued` or `running`; expect `409106` and continue Poll instead.
 
+### User-facing interaction policy
+
+默认按正式产品的用户心智执行，而不是按测试脚本连续跑多轮：
+
+- 首轮只接收用户提供的素材和自然语言意图，等待当前 Turn 结束后返回结果。
+- 首轮得到推荐或 `NEED_USER_INPUT` 时，只展示推荐结果、固定 `conversation_id` 和下一步提示，然后停止；不要因为存在推荐结果就自动发送第二轮。
+- 用户下一次明确表达新意图后，才继续同一个 Cloud 会话。内部自动复用固定 `conversation_id`、生成新的 `outer_request_id`，并且不要求用户提供 Turn、任务 ID 或内部状态。
+- 不把 `MT-HIPPO-02A/02B/02C`、HTTP 请求体、业务 code 或数据库字段暴露给普通用户；这些只用于明确要求的 QA 验收和脱敏报告。
+- 只有用户明确要求“执行完整多轮用例”“自动跑完测试套件”时，才允许在一次 Codex 任务中连续发送后续轮次；执行前先告知将自动创建几轮。
+
+当用户只要求一次冒烟测试时，执行计划必须明确“首轮完成后停止，等待用户下一条消息”，不得自动发起第二个 `/make`。
+
 ### Diagnose Webhooks
 
 Verify the HMAC against the unmodified raw body before parsing JSON. Keep the QA callback secret separate from both QA and production API keys. Deduplicate by `event_id`, acknowledge valid deliveries promptly, and use queryResult for reconciliation.

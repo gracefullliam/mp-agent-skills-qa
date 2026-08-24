@@ -6,7 +6,7 @@
 
 - [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、统一通过 COS 直传本地图片/视频、创建或查询 QA 成片任务，验证固定 `conversation_id` 的多轮自然语言修改，并诊断旧 multipart、Poll/queryResult/Webhook 和公共错误码。
 
-当前 QA 候选版本为 `v1.4.0-qa.1`；它在统一 COS 直传协议上增加固定公开会话、多内部 Turn、成片后继续修改和并发/幂等 Bad Case，不代表生产环境已经发布该能力。
+当前 QA 候选版本为 `v1.5.0-qa.2`；它在统一 COS 直传协议上增加固定公开会话、多内部 Turn、成片后继续修改、并发/幂等 Bad Case，以及首轮完成后默认暂停、明确确认后才继续的用户交互规则。
 
 ## QA 测试报告
 
@@ -37,7 +37,7 @@ FIREFLY_MVA_QA_API_KEY
 
 ```bash
 npx --yes skills add \
-  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.4.0-qa.1 \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.5.0-qa.2 \
   --skill cloud-video-production-qa-debugger \
   --agent codex \
   --global \
@@ -87,6 +87,14 @@ conversation_id: <qa-conversation-id>
 ```text
 使用 $cloud-video-production-qa-debugger 按 references/multiturn-hippo-cases.md
 验证同一 conversation_id 下的首轮推荐、第二轮模板确认或生成式坚持、两轮上限，以及运行中抢跑和幂等冲突。
+```
+
+按正式产品方式逐轮交互，首轮完成后暂停：
+
+```text
+使用 $cloud-video-production-qa-debugger。
+只执行首轮，Poll 到终态后停止，不要自动发送第二轮。
+返回首轮结果和 conversation_id，等待我的下一条自然语言指令。
 ```
 
 所有本地图片和视频都统一调用 `/upload/init`，使用返回的单对象临时凭证交给腾讯云 COS SDK 上传，再调用 `/upload/complete` 获取 `/make` 所需 URL。Skill 不按文件大小分支；SDK 可在内部选择单 PUT 或分片。素材字节不经过 `https://medi-qa.fireflyfusion.cn` 网关，临时凭证不得打印或落盘。原 `/upload` 仅用于旧客户端兼容诊断。
