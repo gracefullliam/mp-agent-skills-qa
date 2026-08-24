@@ -11,6 +11,7 @@
 ## QA 测试报告
 
 - [2026-08-24 Cloud 多轮“河马落入泳池”QA 测试报告](./cases/2026-08-24-cloud-multiturn-hippo-qa-report.md)：本地代码通过，QA 部署仍为旧版请求契约，后续轮尚未完成验收。
+- [2026-08-24 0821 单视频上传兜底规则 QA 测试报告](./cases/2026-08-24-single-video-upload-fallback-qa-report.md)：专项自动化 58 项通过，QA 单视频端到端冒烟完成。
 
 ## 环境边界
 
