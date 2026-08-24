@@ -1,17 +1,12 @@
 # Cloud Video Production QA Skills
 
-用于调试 Firefly Cloud 智能成片 QA 环境的独立 Skill 仓库。
+用于以正式产品用户视角调用 Firefly Cloud 智能成片 QA 环境的独立 Skill 仓库。
 
 当前包含：
 
-- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、统一通过 COS 直传本地图片/视频、创建或查询 QA 成片任务，验证固定 `conversation_id` 的多轮自然语言修改，并诊断旧 multipart、Poll/queryResult/Webhook 和公共错误码。
+- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、统一通过 COS 直传本地图片/视频、创建或查询 QA 成片任务，并按用户自然语言继续同一个 Cloud 会话。
 
-当前 QA 候选版本为 `v1.5.0-qa.2`；它在统一 COS 直传协议上增加固定公开会话、多内部 Turn、成片后继续修改、并发/幂等 Bad Case，以及首轮完成后默认暂停、明确确认后才继续的用户交互规则。
-
-## QA 测试报告
-
-- [2026-08-24 Cloud 两轮“河马落入泳池”QA 测试报告](./cases/2026-08-24-cloud-multiturn-hippo-qa-report.md)：本地 159 项通过；QA 尚未部署，本轮只记录旧版本只读基线，完整验收待部署后复跑。
-- [2026-08-24 0821 单视频上传兜底规则 QA 测试报告](./cases/2026-08-24-single-video-upload-fallback-qa-report.md)：专项自动化 58 项通过，QA 单视频端到端冒烟完成。
+当前 QA Skill 版本为 `v1.5.0-qa.3`。它与正式用户交互保持一致，唯一固定差异是请求目标为 QA 环境。
 
 ## 环境边界
 
@@ -37,7 +32,7 @@ FIREFLY_MVA_QA_API_KEY
 
 ```bash
 npx --yes skills add \
-  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.5.0-qa.2 \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.5.0-qa.3 \
   --skill cloud-video-production-qa-debugger \
   --agent codex \
   --global \
@@ -80,13 +75,6 @@ conversation_id: <qa-conversation-id>
 使用 $cloud-video-production-qa-debugger 在 QA 环境做一次本地视频成片冒烟测试。
 本地视频：/approved/workspace/clip.mp4
 创作意图：生成一条节奏明快的短片
-```
-
-验证河马泳池两轮场景：
-
-```text
-使用 $cloud-video-production-qa-debugger 按 references/multiturn-hippo-cases.md
-验证同一 conversation_id 下的首轮推荐、第二轮模板确认或生成式坚持、两轮上限，以及运行中抢跑和幂等冲突。
 ```
 
 按正式产品方式逐轮交互，首轮完成后暂停：

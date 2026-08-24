@@ -1,6 +1,6 @@
 ---
 name: cloud-video-production-qa-debugger
-description: Diagnose and exercise the Firefly Cloud Video Production public API in the dedicated QA environment at https://medi-qa.fireflyfusion.cn. Use when checking QA gateway health, QA authentication, local image/video direct-to-COS upload, multi-turn natural-language revisions with one fixed conversation_id, legacy multipart compatibility, Cloud make/poll/queryResult behavior, idempotency, Webhook delivery, error codes, or a known QA conversation_id. Use only the isolated FIREFLY_MVA_QA_API_KEY credential; never use this skill for production, staging, or a customer production key.
+description: Exercise the Firefly Cloud Video Production public API from a user perspective in the dedicated QA environment at https://medi-qa.fireflyfusion.cn. Use when checking QA reachability and authentication, uploading explicitly selected local image/video media, creating and polling a Cloud task, continuing a conversation with natural-language revisions, or diagnosing a QA request the operator describes. Use only the isolated FIREFLY_MVA_QA_API_KEY credential; never use this skill for production, staging, or a customer production key.
 ---
 
 # Cloud Video Production QA Debugger
@@ -11,7 +11,6 @@ Debug the Cloud template-production flow in QA while keeping requests, credentia
 
 - Read `references/qa-debug-playbook.md` before running any QA request.
 - Read `references/api-contract.md` before constructing or interpreting direct-upload init/complete, legacy multipart, make, Poll, or queryResult requests.
-- Read `references/multiturn-hippo-cases.md` before testing continuation, template changes after a completed video, concurrent-turn rejection, or idempotency bad cases.
 - Read `references/webhook-contract.md` when diagnosing callbacks or verifying signatures.
 - Use `references/openapi.yaml` for schema validation or generated clients.
 - Run `scripts/make_from_local_media.py` with `uv run --script` for end-to-end local image/video or mixed-media tasks instead of rebuilding the COS workflow.
@@ -103,13 +102,13 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 
 ### User-facing interaction policy
 
-默认按正式产品的用户心智执行，而不是按测试脚本连续跑多轮：
+默认按正式产品的用户心智执行，不按预设测试脚本连续跑多轮：
 
 - 首轮只接收用户提供的素材和自然语言意图，等待当前 Turn 结束后返回结果。
 - 首轮得到推荐或 `NEED_USER_INPUT` 时，只展示推荐结果、固定 `conversation_id` 和下一步提示，然后停止；不要因为存在推荐结果就自动发送第二轮。
 - 用户下一次明确表达新意图后，才继续同一个 Cloud 会话。内部自动复用固定 `conversation_id`、生成新的 `outer_request_id`，并且不要求用户提供 Turn、任务 ID 或内部状态。
-- 不把 `MT-HIPPO-02A/02B/02C`、HTTP 请求体、业务 code 或数据库字段暴露给普通用户；这些只用于明确要求的 QA 验收和脱敏报告。
-- 只有用户明确要求“执行完整多轮用例”“自动跑完测试套件”时，才允许在一次 Codex 任务中连续发送后续轮次；执行前先告知将自动创建几轮。
+- 不把 HTTP 请求体、业务 code 或数据库字段暴露给普通用户；这些只在用户要求诊断或生成报告时使用。
+- 只有用户明确要求一次性执行多轮或自动化测试时，才允许在一次 Codex 任务中连续发送后续轮次；执行前先告知将自动创建几轮。
 
 当用户只要求一次冒烟测试时，执行计划必须明确“首轮完成后停止，等待用户下一条消息”，不得自动发起第二个 `/make`。
 

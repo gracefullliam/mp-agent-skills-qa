@@ -189,7 +189,7 @@ curl --silent --show-error \
   }'
 ```
 
-Do not submit another message while the current Turn is `queued` or `running`. Use `references/multiturn-hippo-cases.md` for the complete positive and bad-case sequence.
+Do not submit another message while the current Turn is `queued` or `running`. After a terminal result, wait for the operator's next natural-language instruction before creating another Turn.
 
 ## Evidence and cleanup
 
