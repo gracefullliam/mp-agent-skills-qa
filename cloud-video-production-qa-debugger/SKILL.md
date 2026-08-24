@@ -112,6 +112,25 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 
 当用户只要求一次冒烟测试时，执行计划必须明确“首轮完成后停止，等待用户下一条消息”，不得自动发起第二个 `/make`。
 
+### User-visible error handling
+
+把典型错误转换成用户能理解的下一步，不把堆栈、数据库字段或内部 Turn 暴露给用户。业务控制以 HTTP 状态、响应 `code` 和当前任务状态为准；服务端 `message` 只作为脱敏后的解释，不要用字符串匹配代替状态判断。
+
+| HTTP / `code` | 用户看到的情况 | 处理方式 |
+| --- | --- | --- |
+| `401100` / `403100` | QA 未授权或 Key 没有 `produce` 权限 | 停止请求，提示 QA 鉴权配置问题；不尝试生产 Key |
+| `404100` | 会话不存在、已过期或当前调用方不可见 | 提示无法找到当前会话；不要泄露其他调用方任务是否存在 |
+| `409102` | 网络重试导致同一请求被重复提交 | 继续使用服务端返回的原任务，不创建新任务 |
+| `409106`（当前 Turn 仍在 `queued`/`running`） | “当前会话正在处理，请稍后查看结果” | 不再次 `/make`，继续 Poll 当前 `conversation_id` |
+| `409106`（服务端明确提示达到最大轮次） | “当前会话已达到最大修改次数，请重新开始” | 停止当前续写；保留旧会话查询能力，新需求新建会话 |
+| `409103` / `409104` | 当前成片任务失败或已取消 | 展示简短失败原因；停止当前等待，不做无界重试 |
+| `409105` | 上传会话已过期 | 重新初始化上传并重新提交素材 |
+| `413100` / `422101` | 素材数量、大小、格式或校验信息不符合要求 | 指出需要修正素材，不要直接重试同一请求 |
+| `429100` | 请求过于频繁 | 遵守 `Retry-After`；相同请求继续复用原 `outer_request_id` |
+| `500100` / `503xxx` | QA 服务暂时异常 | 仅对仍具幂等性的请求做有限重试，并保留原始请求标识 |
+
+正常响应也要按用户状态解释：推荐态返回“已生成可执行方案，请告诉我下一步怎么调整”，视频完成返回“成片创作完成”；不要把 `current_node_description` 和 `feedback.message` 无条件拼成一段话。
+
 ### Diagnose Webhooks
 
 Verify the HMAC against the unmodified raw body before parsing JSON. Keep the QA callback secret separate from both QA and production API keys. Deduplicate by `event_id`, acknowledge valid deliveries promptly, and use queryResult for reconciliation.
