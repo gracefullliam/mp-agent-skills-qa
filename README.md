@@ -10,7 +10,7 @@
 
 ## QA 测试报告
 
-- [2026-08-24 Cloud 多轮“河马落入泳池”QA 测试报告](./cases/2026-08-24-cloud-multiturn-hippo-qa-report.md)：本地代码通过，QA 部署仍为旧版请求契约，后续轮尚未完成验收。
+- [2026-08-24 Cloud 两轮“河马落入泳池”QA 测试报告](./cases/2026-08-24-cloud-multiturn-hippo-qa-report.md)：本地 159 项通过；QA 尚未部署，本轮只记录旧版本只读基线，完整验收待部署后复跑。
 - [2026-08-24 0821 单视频上传兜底规则 QA 测试报告](./cases/2026-08-24-single-video-upload-fallback-qa-report.md)：专项自动化 58 项通过，QA 单视频端到端冒烟完成。
 
 ## 环境边界
@@ -82,11 +82,11 @@ conversation_id: <qa-conversation-id>
 创作意图：生成一条节奏明快的短片
 ```
 
-验证河马泳池多轮场景：
+验证河马泳池两轮场景：
 
 ```text
 使用 $cloud-video-production-qa-debugger 按 references/multiturn-hippo-cases.md
-验证同一 conversation_id 下的推荐、模板确认、成片后换模板，以及运行中抢跑和幂等冲突。
+验证同一 conversation_id 下的首轮推荐、第二轮模板确认或生成式坚持、两轮上限，以及运行中抢跑和幂等冲突。
 ```
 
 所有本地图片和视频都统一调用 `/upload/init`，使用返回的单对象临时凭证交给腾讯云 COS SDK 上传，再调用 `/upload/complete` 获取 `/make` 所需 URL。Skill 不按文件大小分支；SDK 可在内部选择单 PUT 或分片。素材字节不经过 `https://medi-qa.fireflyfusion.cn` 网关，临时凭证不得打印或落盘。原 `/upload` 仅用于旧客户端兼容诊断。

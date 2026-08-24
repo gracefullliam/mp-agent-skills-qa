@@ -1,24 +1,59 @@
-# Cloud 多轮会话“河马落入泳池”测试报告
+# Cloud 两轮“河马落入泳池”测试报告
 
-## 1. 报告结论
+## 1. 结论
 
 测试日期：2026-08-24  
-测试环境：QA `https://medi-qa.fireflyfusion.cn`  
-测试范围：本地多轮逻辑、QA 首轮真实制作、固定 `conversation_id`、幂等重试和后续轮请求校验。
+本地代码：`/Users/yulin/code/mp-video-agent`，分支 `Lynn-Refeactor`
+QA 环境：`https://medi-qa.fireflyfusion.cn`
 
-结论：**代码层通过，QA 部署层未通过，当前不能据此验收多轮能力。**
+结论：
 
-原因不是二次制作业务失败，而是 QA 网关仍运行旧版请求契约：后续请求传入 `conversation_id` 时，QA 仍要求 `assets`，并把 `conversation_id` 判定为未知字段。因此当前 QA 镜像尚未包含固定会话、多 Turn 的公共 API 改动。
+- **本地自动化通过**：Cloud 两轮、意图融合、Poll/queryResult/Webhook 投影和进度文案共 159 项通过。
+- **QA 新版本验收阻塞**：执行期间确认本次代码尚未部署到 QA，因此不能把远端旧版本结果判定为新代码失败。
+- **QA 旧版本基线已确认**：健康检查正常；已有会话的 Poll 仍缺少 `outcome`、`intent_support_status`、`execution_readiness` 等新投影，并把无视频完成态显示为“成片创作完成”。
+- **推荐完成文案已在本地修复**：`outcome=recommendation` 使用“已生成可执行方案”；`outcome=video` 保持“成片创作完成”；`feedback.message` 独立展示。
 
-## 2. 安全与数据范围
+当前验收状态：**L1 本地通过，L3 QA 待部署后复测。**
 
-- 只访问固定 QA 域名，没有访问生产。
-- 使用环境变量中的 `FIREFLY_MVA_QA_API_KEY`，未读取或输出密钥值。
-- 使用已授权的 QA 泳池视频素材；报告不记录完整素材 URL。
-- 未启用 Webhook，未接触 Webhook Secret。
-- QA 任务已真实创建，属于预期测试副作用。
+## 2. 安全与副作用
 
-## 3. 本地自动化结果
+- 只访问固定 QA 域名，没有访问生产或其他环境。
+- 只读取环境变量 `FIREFLY_MVA_QA_API_KEY`，没有输出或落盘密钥。
+- 报告不记录完整素材 URL、签名参数、临时凭证或原始用户视频。
+- 在确认“QA 尚未部署”之前，自动化脚本已创建两个 QA 首轮任务；收到确认后立即停止客户端 Poll，没有继续创建第二轮任务，也没有调用取消接口。停止本地 Poll 不等同于取消服务端任务。
+- 后续只执行健康检查和已有会话 Poll 两个只读请求。
+
+## 3. 本地代码改动
+
+问题复现：
+
+`completed` 被通用进度映射固定投影为“成片创作完成”，没有区分最终 `production_outcome`。同时：
+
+- Terminal Callback 没有把结果类型传给进度描述；
+- `queryResult` 在加载意图结果前生成了终态文案；
+- Poll、queryResult、Webhook 三个出口因此可能不一致。
+
+修复规则：
+
+| 场景 | `current_node_description` |
+| --- | --- |
+| `completed + outcome=video` | `成片创作完成` |
+| `completed + outcome=recommendation` | `已生成可执行方案` |
+| 第二轮视频制作的模板匹配节点 | `正在匹配成片模板...` |
+| 推荐用途的模板匹配节点 | `正在根据现有素材匹配可执行模板...` |
+
+终态判断直接依赖稳定的 `production_outcome`，不依赖模板匹配内部用途字段。
+
+涉及代码：
+
+- `src/mp_video_agent/api/progress.py`
+- `src/mp_video_agent/api/cloud_production_queries.py`
+- `src/mp_video_agent/api/routes/cloud_production.py`
+- `src/mp_video_agent/services/cloud_callback_delivery.py`
+
+回归测试同步覆盖 Poll、queryResult 和 Webhook。
+
+## 4. 本地自动化
 
 执行命令：
 
@@ -30,141 +65,123 @@ env PYTHONDONTWRITEBYTECODE=1 \
   tests/mp_video_agent/test_cloud_conversation.py \
   tests/mp_video_agent/test_cloud_production.py \
   tests/mp_video_agent/test_cloud_production_queries.py \
-  tests/mp_video_agent/test_cloud_intent.py
+  tests/mp_video_agent/test_cloud_intent.py \
+  tests/mp_video_agent/test_progress_description.py \
+  tests/mp_video_agent/test_cloud_callback_delivery.py
 ```
 
 结果：
 
 ```text
-117 passed in 1.83s
+159 passed in 1.73s
 ```
 
-覆盖重点：
-
-- 已完成视频后可以创建下一 Turn。
-- `queued`/`running` 时拒绝下一轮。
-- `failed`/`cancelled` 后可以在状态可恢复时修订。
-- 固定公开 `conversation_id` 和递增内部 Turn。
-- 每轮新的 `outer_request_id`，同轮只允许完全一致的重试。
-- 历史 `continuation_confirmation` 不会自动变成下一轮授权。
-
-## 4. QA 真实测试记录
-
-### 4.1 网关健康检查
-
-| 项目 | 结果 |
-| --- | --- |
-| HTTP | `200` |
-| 健康状态 | `healthy` |
-| 服务版本 | `v2` |
-| Apollo | 已启用，刷新无错误 |
-| Kafka 日志 | 已连接，未见失败或丢弃 |
-
-### 4.2 首轮河马请求
-
-请求意图：
+先行红测：
 
 ```text
-在原视频中加入河马落入泳池、将水溅出并最终让泳池干涸的桥段，生成后下载视频。
+4 failed
 ```
 
-| 项目 | 结果 |
-| --- | --- |
-| HTTP / 业务码 | `200 / 200` |
-| 公开会话 | `3244c3a5-b3c1-41d8-b286-9a7918274a97` |
-| 首次受理状态 | `running` |
-| Poll 轨迹 | `preprocess` → `video_highlight_detection` → `tagging` → `render_template_features` → `render:running` |
-| 终态 | `completed` |
-| 视频 | `video_url` 非空 |
-| 错误 | `error_messages=[]` |
-| queryResult | `final_provider=foreign_cloud_edit`，最终渲染状态 `completed` |
+四个失败分别精确命中：
 
-观察：当前 QA 首轮直接进入视频制作并返回成片，没有返回预期的 `outcome=recommendation + execution_readiness=NEED_USER_INPUT`。这与本次代码和 QA 用例预期不一致，说明 QA 部署版本的意图融合/推荐阻塞逻辑也不是当前工作区版本。
+- 公共进度描述；
+- Cloud Poll 投影；
+- Terminal Callback；
+- queryResult。
 
-### 4.3 后续轮请求
+修复后相同四项：
 
-请求使用：
-
-- 同一个公开 `conversation_id`
-- 不传 `assets`
-- 自然语言：`换一个更轻快、更适合亲子游泳记录的模板`
-- 新的 `outer_request_id`
-
-QA 返回：
-
-```json
-{
-  "code": 400100,
-  "message": "request validation failed",
-  "errors": [
-    {
-      "field": "assets",
-      "reason": "missing",
-      "message": "Field required"
-    },
-    {
-      "field": "conversation_id",
-      "reason": "extra_forbidden",
-      "message": "Extra inputs are not permitted"
-    }
-  ]
-}
+```text
+4 passed in 0.83s
 ```
 
-判定：**QA 尚未部署多轮请求模型。** 这一步在旧版校验层就被拒绝，没有进入 continuation service，也没有创建新 Turn。
+## 5. QA 只读基线
 
-### 4.4 幂等重试
+### 5.1 健康检查
 
-使用首轮完全相同的 Body 和 `outer_request_id` 重试：
-
-| 项目 | 结果 |
+| 项 | 值 |
 | --- | --- |
-| 业务码 | `409102` |
-| `idempotent_replay` | `true` |
-| 返回会话 | 与首轮相同 |
-| 返回状态 | `completed` |
-| 是否新增任务 | 否 |
+| 时间 | `2026-08-24T17:07:10+08:00` |
+| Method / Endpoint | `GET /api/rest/mva/health` |
+| X-Request-ID | `qa-health-baseline-bf14bcdc9a6746bdaed4b6abd35ed02e` |
+| HTTP | `200` |
+| 服务状态 | `healthy` |
+| 服务版本 | `v2` |
+| Apollo | enabled，刷新无错误 |
+| Kafka 日志 | producer connected，无失败或丢弃 |
 
-该项通过。
+该请求只读，不创建任务。
 
-## 5. 用例通过矩阵
+### 5.2 已有会话 Poll
 
-| 用例 | 本地代码 | QA 真实环境 | 结论 |
+| 项 | 值 |
+| --- | --- |
+| 时间 | `2026-08-24T17:07:10+08:00` |
+| Method / Endpoint | `POST /api/rest/mva/out/cloud/poll` |
+| X-Request-ID | `qa-poll-known-baseline-cfa8b1bee9964c7fb3dbfb7e622bed39` |
+| conversation_id | `22ba82de86b84f9ab89fc496c2eac0ba` |
+| HTTP / body code | `200 / 200` |
+| status / current_node | `completed / completed` |
+| current_node_description | `成片创作完成` |
+| video_url | 空 |
+| outcome / readiness | 未返回 |
+| 推荐列表 | 未返回 |
+
+事实判断：QA 当前部署不是本次工作区版本。该响应不能用于验证新的推荐完成文案，也不能证明本地修复失败。
+
+## 6. 部署确认前的旧版本观察
+
+真实脚本在 `2026-08-24 17:00～17:03 Asia/Shanghai` 启动。收到“QA 还没部署”后已中止。
+
+旧版本观察：
+
+- 首轮河马请求被快速受理；
+- 运行轨迹仍出现 `render_template_features = 成片构想中...`；
+- 首轮直接进入渲染并显示“成片创作完成”，没有按本次规则停在推荐态；
+- 后续新协议分支没有形成可用于验收的完整证据；
+- 第二个首轮任务在客户端停止时仍在执行素材理解。
+
+这些记录只作为“QA 未部署”的辅助基线，不计入新版本用例通过率。
+
+## 7. 用例矩阵
+
+| 用例 | 本地自动化 | QA 新版本 | 当前结论 |
 | --- | --- | --- | --- |
-| 首轮接收并异步 Poll | 通过 | 通过 | 通过 |
-| 首轮河马需求进入推荐态 | 通过规则测试 | 未进入推荐态 | QA 版本偏旧 |
-| 成片后复用会话继续换模板 | 通过 | 被旧请求模型拒绝 | 阻塞 |
-| Poll 返回当前最新 Turn | 通过单测 | 尚未产生第二 Turn，无法验收 | 待部署后重测 |
-| 运行中抢跑返回 `409106` | 通过单测 | 尚未进入新协议 | 待部署后重测 |
-| 幂等键完全一致重试 | 通过 | `409102` | 通过 |
-| 幂等键复用但修改意图 | 通过单测 | 受旧请求模型阻塞 | 待部署后重测 |
-| 后续轮重复传素材拒绝 | 通过请求模型测试 | 旧版本不支持后续轮字段 | 待部署后重测 |
-| 历史 Best-effort 不泄漏到下一轮 | 通过单测 | 尚未产生第二 Turn | 待部署后重测 |
+| MT-HIPPO-01 首轮返回推荐态 | 通过 | 未部署 | BLOCKED |
+| MT-HIPPO-02A 第二轮选择第一个并成片 | 通过 | 未部署 | BLOCKED |
+| MT-HIPPO-02B 仍要求河马并 Best-effort 成片 | 通过 | 未部署 | BLOCKED |
+| MT-HIPPO-02C 普通偏好重新推荐 | 通过 | 未部署 | BLOCKED |
+| B01 运行中拒绝并发续写 | 通过 | 未部署 | BLOCKED |
+| B02 幂等键复用但文字变化 | 通过 | 未部署 | BLOCKED |
+| B03 后续轮带素材 | 通过 | 旧版基线响应符合拒绝方向，不能代替新版本验收 | BLOCKED |
+| B04 后续轮空意图 | 通过 | 旧版基线响应符合拒绝方向，不能代替新版本验收 | BLOCKED |
+| B05 不存在会话 | 通过 | 未形成新版本证据 | BLOCKED |
+| B06 第二轮后拒绝第三轮 | 通过 | 未部署 | BLOCKED |
+| B07 Poll 固定公开 ID 返回最新 Turn | 通过 | 未部署 | BLOCKED |
+| B08 推荐完成文案 | 通过 | QA 仍为旧文案 | BLOCKED |
+| B09 视频完成文案与 feedback 分开展示 | 通过 | 未部署 | BLOCKED |
 
-## 6. 当前阻塞与处理建议
+## 8. 部署后复测顺序
 
-### 阻塞证据
+1. 同时部署 QA API 与 Worker，确认镜像包含本次提交。
+2. 先执行健康检查，再用全新 `qa-` 标识创建会话。
+3. 分别使用三个独立首轮会话执行 MT-HIPPO-02A、02B、02C。
+4. 在首轮运行中执行 B01。
+5. 首轮推荐完成后、第二轮创建前执行 B03、B04。
+6. 第二轮受理后执行 B02，并 Poll 固定 `conversation_id` 验证 B07。
+7. 第二轮终态后执行 B06。
+8. 验证推荐终态为“已生成可执行方案”，视频终态为“成片创作完成”，feedback 始终单独展示。
+9. 只读核验 Turn 关系：同一 `cloud_conversation_id`、索引 1/2、第二 Turn 正确指向第一 Turn。
 
-QA 返回的 `assets missing + conversation_id extra_forbidden` 与当前工作区的 `CloudProductionRequest` 契约相反。当前代码约定是：首轮带 `assets`，后续轮只带固定 `conversation_id + user_intent + 新 outer_request_id`。
+## 9. 最终验收标准
 
-### 下一步
+以下条件全部满足后，QA 才能判定通过：
 
-1. 将当前多轮代码构建成 QA 镜像，同时部署 API 和 Worker；不能只重启 API。
-2. 确认 QA 的 `/openapi.json` 或部署镜像已出现 `conversation_id` 后续轮字段。
-3. 使用新的 QA 会话重新执行 MT-HIPPO-01，不要复用旧会话。
-4. 首轮进入 `recommendation + NEED_USER_INPUT` 后执行 MT-HIPPO-02。
-5. 第二轮终态后执行 MT-HIPPO-03 和 MT-HIPPO-04。
-6. 在任一轮 `running` 时立即发送新一轮，确认 `409106` 且数据库不新增竞争 Turn。
-7. 重新执行 B01～B06，并执行数据库只读核验：`cloud_conversation_id` 相同、`cloud_turn_index` 单调递增、`previous_turn_id` 正确。
-
-## 7. 复测通过标准
-
-只有以下条件同时满足，才可以说 QA 多轮需求验收通过：
-
-- 后续 `/make` 不再要求 `assets`。
-- 后续 `/make` 接受 `conversation_id`，并返回相同公开会话 ID。
-- 每轮创建新的内部 Turn，且 `/poll` 始终返回最新轮。
-- `completed` 视频后仍能自然语言换模板或修改要求。
-- `queued`/`running` 并发续写返回 `409106`，不产生分叉。
-- 历史模板确认不会永久授权新的不可执行要求。
-- 幂等重试、坏请求和跨应用隔离仍保持原有错误码契约。
+- 首轮河马需求返回 `recommendation + UNSUPPORTED + NEED_USER_INPUT`；
+- 推荐终态不再显示“成片创作完成”；
+- 第二轮选择模板或仍明确生成式要求都能生成视频；
+- 第二轮模板匹配运行文案为“正在匹配成片模板...”；
+- 公开 `conversation_id` 两轮固定；
+- 第二轮完成后第三次 `/make` 返回 `409106`；
+- Poll、queryResult、Webhook 对结果类型使用同一完成文案；
+- 报告中不出现凭据或完整素材 URL。
