@@ -191,6 +191,24 @@ curl --silent --show-error \
 
 Do not submit another message while the current Turn is `queued` or `running`. After a terminal result, wait for the operator's next natural-language instruction before creating another Turn.
 
+For a natural-language request asking several shown templates to produce one video each, send the original text once with the fixed `conversation_id`. Do not translate it into several HTTP requests. Poll the same conversation: while active, capture `completed_count/total_count`; at terminal state, capture ordered `video_results` and verify every returned title and template code against the recommendation list the user actually saw.
+
+### Cancel active QA work
+
+Only cancel after an explicit operator request:
+
+```bash
+curl --silent --show-error \
+  --request POST \
+  'https://medi-qa.fireflyfusion.cn/api/rest/mva/out/cloud/cancel' \
+  --header 'Content-Type: application/json' \
+  --header "X-API-Key: ${FIREFLY_MVA_QA_API_KEY}" \
+  --header 'X-Request-ID: qa-debug-cancel-001' \
+  --data-binary '{"conversation_id":"<fixed-qa-conversation-id>"}'
+```
+
+After a successful cancellation, Poll once to reconcile the public terminal state. Treat `409106` as “no active work to cancel”; do not report cancellation success and do not retry indefinitely.
+
 ## Evidence and cleanup
 
 Capture request time, endpoint, safe trace identifiers, HTTP status, body code, task status, current node, and sanitized errors. Record whether the action stored media or created a task.

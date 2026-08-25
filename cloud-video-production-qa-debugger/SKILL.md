@@ -107,6 +107,8 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 - 首轮只接收用户提供的素材和自然语言意图，等待当前 Turn 结束后返回结果。
 - 首轮得到推荐或 `NEED_USER_INPUT` 时，只展示推荐结果、固定 `conversation_id` 和下一步提示，然后停止；不要因为存在推荐结果就自动发送第二轮。
 - 用户下一次明确表达新意图后，才继续同一个 Cloud 会话。内部自动复用固定 `conversation_id`、生成新的 `outer_request_id`，并且不要求用户提供 Turn、任务 ID 或内部状态。
+- 用户要求将多个已展示模板分别制作成片时，只发送一次原始自然语言 `/make`；服务端负责创建一个 Command 和多个有序 Job。不要由 Debugger 拆成多次请求，也不要新建会话或重新上传素材。
+- 用户要求取消当前制作时，对固定 `conversation_id` 调用 `/out/cloud/cancel`；不要只停止本地 Poll，也不要重复取消已经终态的 Command。
 - 不把 HTTP 请求体、业务 code 或数据库字段暴露给普通用户；这些只在用户要求诊断或生成报告时使用。
 - 只有用户明确要求一次性执行多轮或自动化测试时，才允许在一次 Codex 任务中连续发送后续轮次；执行前先告知将自动创建几轮。
 
@@ -143,6 +145,8 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 不要只说“模板候选包括……”，也不要把 `template_code`、内部评分、数据库字段、`preview_url` 或 `previewUrl` 标签塞进普通用户列表。`preview_url` 为空时不生成假链接，保留标题并标注“暂无预览”。只有用户明确要求原始接口字段时，才额外返回 `title` 和 `previewUrl` 的字段值；默认用户展示仍使用“点击查看模板效果”。
 
 用户要求更多模板时，继续使用同一会话提交原话；返回新批次后仍只展示标题和“点击查看模板效果”，并等待用户下一步。
+
+批量成片 Poll 结果：运行态读取 `completed_count/total_count`；终态读取 `video_results`，按 `sequence_index` 展示模板 `title` 和视频链接。`partial_failed` 保留成功视频和失败项。调试证据可以记录 `command_id/job_id`，但普通用户回复不得暴露这些内部标识。
 
 If the user asks for more templates or more recommendations (for example, “再给一些模板”“这些都不满意”“还有别的吗”), forward the original text as a new Turn with the fixed `conversation_id`, no `assets`, and a new `outer_request_id`. The service classifies the request as `request_more_templates` and uses its recommendation cache to avoid previously exposed templates. Do not choose a template, upload media, or construct candidates locally for this action. Repeat only while the service accepts the continuation; do not impose a local two-turn limit.
 

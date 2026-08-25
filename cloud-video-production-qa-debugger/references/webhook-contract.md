@@ -52,7 +52,30 @@ X-MP-Video-Signature: sha256=<hex-digest>
 }
 ```
 
-`current_node` is the stable machine-readable progress key. `current_node_description` is the corresponding Chinese progress copy and uses the same mapping as Poll/queryResult. Intermediate event `data` is currently empty. `production.completed` exposes only `video_url` in `data`; it does not expose `poster_url`.
+`current_node` is the stable machine-readable progress key. `current_node_description` is the corresponding Chinese progress copy and uses the same mapping as Poll/queryResult. Intermediate event `data` is currently empty. A single-video `production.completed` exposes `video_url` in `data`; it does not expose `poster_url`.
+
+One batch user Command emits one public terminal callback after all Jobs are terminal. It does not emit one public completion per internal Job. A successful or partially successful batch uses `production.completed` and includes:
+
+```json
+{
+  "data": {
+    "outcome": "videos",
+    "video_url": "",
+    "video_results": [
+      {
+        "sequence_index": 1,
+        "template_code": "0x0100000000003B7F",
+        "title": "记录开心",
+        "status": "completed",
+        "video_url": "https://result.example.com/1.mp4",
+        "error_message": ""
+      }
+    ]
+  }
+}
+```
+
+All failed Jobs produce `production.failed`; cancellation produces `production.cancelled`. Deduplicate by `event_id` as usual. The service also atomically claims Command-level terminal callback enqueueing, but receivers must still tolerate transport retries.
 
 ## Signature verification
 

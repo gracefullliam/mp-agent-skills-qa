@@ -1,105 +1,82 @@
 # Cloud Video Production QA Skills
 
-用于以正式产品用户视角调用 Firefly Cloud 智能成片 QA 环境的独立 Skill 仓库。
+Firefly Cloud 智能成片 QA 环境 Skill。交互方式与正式产品一致，固定差异仅为服务地址和 QA 凭据。
 
-当前包含：
+当前版本：`v1.6.0-qa.1`。
 
-- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、统一通过 COS 直传本地图片/视频、创建或查询 QA 成片任务，并按用户自然语言继续同一个 Cloud 会话。
+## Skills
 
-当前 QA Skill 版本为 `v1.5.0-qa.8`。它与正式用户交互保持一致，唯一固定差异是请求目标为 QA 环境；同时保留常见错误提示规则，并将模板推荐以模板标题和“点击查看模板效果”链接展示。`preview_url`/`previewUrl` 仅是内部字段映射，不能作为用户可见标签。后续模板选择、重复生成式要求和成片后的修改必须复用原 `conversation_id`，不得新建首轮任务；未在当前推荐批次中的模板引用必须直接报冲突，不得随机回退。
+- [`cloud-video-production-qa`](./cloud-video-production-qa/SKILL.md)：默认用户模式。上传用户明确选择的素材、提交自然语言指令、等待结果并返回简洁的推荐或视频。
+- [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：调试副本。仅在用户明确要求排查、原始响应或测试证据时使用。
 
-多轮推荐规则：用户可以在同一 `conversation_id` 下用自然语言请求更多模板或推荐；每轮使用新的 `outer_request_id`，服务端通过推荐缓存排除已经展示过的候选。Debugger 只展示服务端返回的 `title` 和 `preview_url`，不自行选择、补足或伪造模板。
+模板推荐以模板标题和“点击查看模板效果”链接展示。`preview_url`/`previewUrl` 仅是内部字段映射，不能作为用户可见标签。后续模板选择、重复生成式要求、批量制作和成片后的修改必须复用原 `conversation_id`，不得新建首轮任务；未在当前推荐批次中的模板引用必须直接报冲突，不得随机回退。
 
-## 环境边界
+默认 Skill 不展示 HTTP、内部 ID、命令、日志、SQL 或节点调试信息，也不会自动发送下一轮。用户后续继续对话时，Skill 复用固定 `conversation_id`，并将用户原话提交给服务端判断。
 
-Skill 固定使用：
+支持的用户行为包括：
+
+- 选择一个已展示模板；
+- 请求更多模板；
+- 调整意图后继续制作；
+- 用一句自然语言要求多个模板分别成片；
+- 查询或取消当前制作。
+
+批量模板请求只提交一次 `/make`。服务端在同一会话内串行执行多个成片，并通过 `/poll` 返回聚合进度和有序 `video_results`。Skill 不拆成多轮、不新建会话、不自行解析模板序号。
+
+## 环境
+
+固定 QA 地址：
 
 ```text
 https://medi-qa.fireflyfusion.cn
 ```
 
-QA 凭据只从以下环境变量读取：
+凭据只从以下变量读取：
 
 ```text
 FIREFLY_MVA_QA_API_KEY
 ```
 
-该变量必须保存具有 `produce` scope 的 QA Key。不得填入生产 Key，不得配置通用 API Key 回退，也不得把真实值提交到仓库、粘贴到提示词或打印到日志。
+该 Key 必须具有 `produce` scope。不要把真实值写入仓库、聊天、截图或报告，也不要使用生产 Key 兜底。
 
-如需测试 Webhook，使用独立的 `FIREFLY_MVA_QA_WEBHOOK_SECRET`，不要复用生产回调密钥。
+## 安装
 
-## 安装到 Codex
-
-仓库为私有仓库，先确保本机 GitHub 身份有访问权限，然后执行：
+安装默认用户 Skill：
 
 ```bash
 npx --yes skills add \
-  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.5.0-qa.8 \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.6.0-qa.1 \
+  --skill cloud-video-production-qa \
+  --agent codex \
+  --global \
+  --yes
+```
+
+需要调试能力时，再安装副本：
+
+```bash
+npx --yes skills add \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.6.0-qa.1 \
   --skill cloud-video-production-qa-debugger \
   --agent codex \
   --global \
   --yes
 ```
 
-更新已安装版本：
+升级或回滚时显式替换 URL 中的 tag。安装后新建一个 Codex 任务，让 Skill 重新加载。
 
-```bash
-npx --yes skills update cloud-video-production-qa-debugger --global --yes
-```
+## 使用
 
-如果返回 `No installed skills found matching`，说明当前副本没有被 `npx skills` 登记；重新执行上面的固定版本 `skills add`。`skills update` 只更新原安装源，不会自动从一个固定 tag 切换到另一个 QA 版本；升级或回滚时显式替换安装 URL 中的 tag。
-
-安装或更新后，新建一个 Codex 任务以重新加载 Skill。
-
-## 配置 QA Key
-
-使用终端、CI/CD 或本机密钥管理器向 Codex 进程注入：
-
-```bash
-export FIREFLY_MVA_QA_API_KEY='<qa-produce-key>'
-```
-
-上面的值只在本机设置，不要把真实命令及其值提交到 Git、截图或工单。可复制 `.env.example` 作为字段清单，但 `.env` 文件已被 Git 忽略。
-
-## 使用示例
-
-诊断已有任务：
+正常使用：
 
 ```text
-使用 $cloud-video-production-qa-debugger 查询 QA 任务。
-conversation_id: <qa-conversation-id>
-需要检查持久化父任务投影时使用 queryResult；需要核验客户可见的当前轮状态和结果时使用 Poll。
+使用 $cloud-video-production-qa，根据我选择的素材和自然语言要求制作视频。
 ```
 
-使用本地素材做 QA 冒烟测试：
+后续直接继续说话即可。Skill 会复用同一 Cloud 会话；不会要求用户提供 Turn、Job 或内部任务标识。
+
+需要排查时：
 
 ```text
-使用 $cloud-video-production-qa-debugger 在 QA 环境做一次本地视频成片冒烟测试。
-本地视频：/approved/workspace/clip.mp4
-创作意图：生成一条节奏明快的短片
+使用 $cloud-video-production-qa-debugger 排查这个 QA 会话，并给我脱敏后的接口证据。
 ```
-
-按正式产品方式逐轮交互，首轮完成后暂停：
-
-```text
-使用 $cloud-video-production-qa-debugger。
-只执行首轮，Poll 到终态后停止，不要自动发送第二轮。
-返回首轮结果和 conversation_id，等待我的下一条自然语言指令。
-```
-
-需要继续时，可在同一 `conversation_id` 下说“再给一些模板”“这些都不满意”等，验证服务端推荐缓存避重和后续模板确认。
-
-所有本地图片和视频都统一调用 `/upload/init`，使用返回的单对象临时凭证交给腾讯云 COS SDK 上传，再调用 `/upload/complete` 获取 `/make` 所需 URL。Skill 不按文件大小分支；SDK 可在内部选择单 PUT 或分片。素材字节不经过 `https://medi-qa.fireflyfusion.cn` 网关，临时凭证不得打印或落盘。原 `/upload` 仅用于旧客户端兼容诊断。
-
-Skill 内置 `scripts/make_from_local_media.py`，可直接处理图片、视频或混合素材：
-
-```bash
-uv run --script scripts/make_from_local_media.py \
-  --input /approved/workspace/photo.jpg \
-  --input /approved/workspace/clip.mp4 \
-  --intent '生成一条节奏明快的短片' \
-  --output-dir ./outputs \
-  --wait
-```
-
-Skill 不会把 QA 请求切换到生产环境，也不会在 QA Key 失败时尝试生产 Key。

@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Firefly Cloud Video Production QA API
-  version: 1.2.1-qa
-  description: QA-only unified direct-to-COS local-material upload and asynchronous Cloud template-production contract. Use a dedicated QA credential and never a production key.
+  version: 1.6.0-qa
+  description: QA-only direct-to-COS upload and asynchronous Cloud template-production contract, including fixed-conversation continuation, natural-language batch template production, aggregate Poll, and cancellation. Use a dedicated QA credential and never a production key.
 servers:
   - url: https://medi-qa.fireflyfusion.cn
     description: Dedicated QA Agent gateway. Do not override with a production origin.
@@ -165,13 +165,48 @@ paths:
               $ref: '#/components/schemas/TaskQueryRequest'
       responses:
         '200':
-          description: Running or completed task
+          description: Running, recommendation, single-video, or aggregate multi-video result
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BaseResponse'
+                $ref: '#/components/schemas/CloudPollResponse'
         '409':
           description: Task failed or was cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        default:
+          description: Cloud API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/rest/mva/out/cloud/cancel:
+    post:
+      operationId: cancelCloudVideoProduction
+      summary: Cancel the current active Cloud production Command
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskQueryRequest'
+      responses:
+        '200':
+          description: Active Command and its unfinished Jobs were cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudCancelResponse'
+        '404':
+          description: Conversation not found for the current tenant and application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: No active Cloud production work exists to cancel
           content:
             application/json:
               schema:
@@ -447,6 +482,113 @@ components:
         conversation_id:
           type: string
           minLength: 1
+    CloudVideoResult:
+      type: object
+      additionalProperties: false
+      required: [sequence_index, template_code, title, status, video_url, error_message]
+      properties:
+        sequence_index:
+          type: integer
+          minimum: 1
+        template_code:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [queued, dispatching, running, completed, failed, cancelled]
+        video_url:
+          type: string
+        error_message:
+          type: string
+    CloudBatchRunningData:
+      type: object
+      additionalProperties: false
+      required: [conversation_id, status, current_node, current_node_description, error_messages, completed_count, total_count]
+      properties:
+        conversation_id:
+          type: string
+        status:
+          type: string
+          const: running
+        current_node:
+          type: string
+          const: assemble
+        current_node_description:
+          type: string
+        error_messages:
+          type: array
+          items:
+            type: string
+        completed_count:
+          type: integer
+          minimum: 0
+        total_count:
+          type: integer
+          minimum: 1
+    CloudBatchTerminalData:
+      type: object
+      additionalProperties: false
+      required: [conversation_id, status, current_node, current_node_description, error_messages, video_url, outcome, video_results]
+      properties:
+        conversation_id:
+          type: string
+        status:
+          type: string
+          enum: [completed, partial_failed, failed, cancelled]
+        current_node:
+          type: string
+          enum: [completed, partial_failed, failed, cancelled]
+        current_node_description:
+          type: string
+        error_messages:
+          type: array
+          items:
+            type: string
+        video_url:
+          type: string
+        outcome:
+          type: string
+          const: videos
+        video_results:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/CloudVideoResult'
+    CloudPollResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              anyOf:
+                - $ref: '#/components/schemas/CloudBatchRunningData'
+                - $ref: '#/components/schemas/CloudBatchTerminalData'
+                - type: object
+                  description: Single-video, recommendation, or ordinary current-Turn payload.
+                  required: [conversation_id, status]
+                  additionalProperties: true
+                  properties:
+                    conversation_id:
+                      type: string
+                    status:
+                      type: string
+    CloudCancelResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [conversation_id, status]
+              properties:
+                conversation_id:
+                  type: string
+                status:
+                  type: string
+                  const: cancelled
     CallbackEvent:
       type: string
       enum:
@@ -479,7 +621,7 @@ components:
       properties:
         code:
           type: integer
-          enum: [400100, 401100, 403100, 404100, 404101, 405100, 409100, 409101, 409102, 409103, 409104, 409105, 413100, 422100, 422101, 429100, 500100, 503100, 503101]
+          enum: [400100, 401100, 403100, 404100, 404101, 405100, 409100, 409101, 409102, 409103, 409104, 409105, 409106, 413100, 422100, 422101, 429100, 500100, 503100, 503101]
         data:
           type: object
           additionalProperties: true

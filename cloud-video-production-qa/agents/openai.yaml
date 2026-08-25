@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cloud Video Production QA"
+  short_description: "Create and continue QA cloud videos from a user perspective"
+  default_prompt: "Use $cloud-video-production-qa to create or continue a QA Cloud video conversation with selected media and natural-language instructions. Keep internal execution details hidden and wait for the user's next turn."
