@@ -131,7 +131,7 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 
 正常响应也要按用户状态解释：推荐态返回“已生成可执行方案，请告诉我下一步怎么调整”，视频完成返回“成片创作完成”；不要把 `current_node_description` 和 `feedback.message` 无条件拼成一段话。
 
-推荐结果中的 `template_recommendations` 必须面向用户展示为简洁列表。每一项只展示模板 `title` 和公开的 `preview_url`，并把预览地址渲染成可点击的 Markdown 链接；展示标签统一使用 `previewUrl`，例如：
+推荐结果中的 `template_recommendations` 必须面向用户展示为简洁列表。每一项只展示模板标题和公开的预览链接；服务端字段 `preview_url`（如内部对象映射为 `previewUrl`）只用于读取地址，绝不能作为用户可见的链接文字或标签。链接文字必须固定为“点击查看模板效果”，例如：
 
 ```markdown
 ### 可选模板
@@ -140,7 +140,7 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 2. **小棉袄** — [点击查看模板效果](https://example.com/template-preview-2.mp4)
 ```
 
-不要只说“模板候选包括……”，也不要把 `template_code`、内部评分或数据库字段塞进普通用户列表。`preview_url` 为空时不生成假链接，保留标题并标注“暂无预览”。如果用户明确要求原始字段，再额外返回 `title` 和 `previewUrl` 对应值。
+不要只说“模板候选包括……”，也不要把 `template_code`、内部评分、数据库字段、`preview_url` 或 `previewUrl` 标签塞进普通用户列表。`preview_url` 为空时不生成假链接，保留标题并标注“暂无预览”。只有用户明确要求原始接口字段时，才额外返回 `title` 和 `previewUrl` 的字段值；默认用户展示仍使用“点击查看模板效果”。
 
 用户要求更多模板时，继续使用同一会话提交原话；返回新批次后仍只展示标题和“点击查看模板效果”，并等待用户下一步。
 

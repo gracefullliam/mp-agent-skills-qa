@@ -6,7 +6,7 @@
 
 - [`cloud-video-production-qa-debugger`](./cloud-video-production-qa-debugger/SKILL.md)：检查 QA 网关和鉴权、统一通过 COS 直传本地图片/视频、创建或查询 QA 成片任务，并按用户自然语言继续同一个 Cloud 会话。
 
-当前 QA Skill 版本为 `v1.5.0-qa.7`。它与正式用户交互保持一致，唯一固定差异是请求目标为 QA 环境；同时保留常见错误提示规则，并将模板推荐以 `title + previewUrl` 可点击列表展示。后续模板选择、重复生成式要求和成片后的修改必须复用原 `conversation_id`，不得新建首轮任务；未在当前推荐批次中的模板引用必须直接报冲突，不得随机回退。
+当前 QA Skill 版本为 `v1.5.0-qa.8`。它与正式用户交互保持一致，唯一固定差异是请求目标为 QA 环境；同时保留常见错误提示规则，并将模板推荐以模板标题和“点击查看模板效果”链接展示。`preview_url`/`previewUrl` 仅是内部字段映射，不能作为用户可见标签。后续模板选择、重复生成式要求和成片后的修改必须复用原 `conversation_id`，不得新建首轮任务；未在当前推荐批次中的模板引用必须直接报冲突，不得随机回退。
 
 多轮推荐规则：用户可以在同一 `conversation_id` 下用自然语言请求更多模板或推荐；每轮使用新的 `outer_request_id`，服务端通过推荐缓存排除已经展示过的候选。Debugger 只展示服务端返回的 `title` 和 `preview_url`，不自行选择、补足或伪造模板。
 
@@ -34,7 +34,7 @@ FIREFLY_MVA_QA_API_KEY
 
 ```bash
 npx --yes skills add \
-  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.5.0-qa.7 \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.5.0-qa.8 \
   --skill cloud-video-production-qa-debugger \
   --agent codex \
   --global \
