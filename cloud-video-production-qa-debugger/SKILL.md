@@ -146,6 +146,8 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 
 If the user asks for more templates or more recommendations (for example, “再给一些模板”“这些都不满意”“还有别的吗”), forward the original text as a new Turn with the fixed `conversation_id`, no `assets`, and a new `outer_request_id`. The service classifies the request as `request_more_templates` and uses its recommendation cache to avoid previously exposed templates. Do not choose a template, upload media, or construct candidates locally for this action. Repeat only while the service accepts the continuation; do not impose a local two-turn limit.
 
+Every later user instruction—including a template ordinal/title, a repeated unsupported generation request, or a change after a completed video—must be submitted as a later Turn on the fixed `conversation_id`. Never create a new first-turn task to apply a template or “try again”: doing so loses the source materials and recommendation batch and can silently produce the same default template. Forward ordinal text such as `1`, `2`, or `3` unchanged. If the server rejects a reference because it was not in the current recommendation batch, report that conflict and ask the operator to choose from the returned list; do not locally resolve it or start a new conversation.
+
 ### Diagnose Webhooks
 
 Verify the HMAC against the unmodified raw body before parsing JSON. Keep the QA callback secret separate from both QA and production API keys. Deduplicate by `event_id`, acknowledge valid deliveries promptly, and use queryResult for reconciliation.
