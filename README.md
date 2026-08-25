@@ -2,7 +2,7 @@
 
 Firefly Cloud 智能成片 QA 环境 Skill。交互方式与正式产品一致，固定差异仅为服务地址和 QA 凭据。
 
-当前版本：`v1.6.0-qa.1`。
+当前版本：`v1.6.0-qa.3`。
 
 ## Skills
 
@@ -18,8 +18,14 @@ Firefly Cloud 智能成片 QA 环境 Skill。交互方式与正式产品一致�
 - 选择一个已展示模板；
 - 请求更多模板；
 - 调整意图后继续制作；
+- 对已有成片提出换音乐要求；当前通过更换模板重新成片，不支持单独替换音轨，音乐和画面效果可能一起变化；
+- 对已有成片提出素材顺序调整；当前按 Best-effort 重新成片，不保证精确顺序；
 - 用一句自然语言要求多个模板分别成片；
 - 查询或取消当前制作。
+
+换音乐和素材顺序调整都必须继续复用原 `conversation_id` 并提交用户原话。
+服务端返回视频后，Skill 会同时展示非空的 `feedback.message`，说明当前编辑能力边界并请用户确认效果；
+不会虚假宣称已经完成单独换音乐或精确素材重排。后续能力随 Agent 和组织逻辑版本迭代。
 
 批量模板请求只提交一次 `/make`。服务端在同一会话内串行执行多个成片，并通过 `/poll` 返回聚合进度和有序 `video_results`。Skill 不拆成多轮、不新建会话、不自行解析模板序号。
 
@@ -45,7 +51,7 @@ FIREFLY_MVA_QA_API_KEY
 
 ```bash
 npx --yes skills add \
-  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.6.0-qa.1 \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.6.0-qa.3 \
   --skill cloud-video-production-qa \
   --agent codex \
   --global \
@@ -56,7 +62,7 @@ npx --yes skills add \
 
 ```bash
 npx --yes skills add \
-  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.6.0-qa.1 \
+  https://github.com/gracefullliam/mp-agent-skills-qa/tree/v1.6.0-qa.3 \
   --skill cloud-video-production-qa-debugger \
   --agent codex \
   --global \
