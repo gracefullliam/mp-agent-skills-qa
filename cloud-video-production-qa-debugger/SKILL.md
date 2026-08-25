@@ -108,6 +108,9 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 - 首轮得到推荐或 `NEED_USER_INPUT` 时，只展示推荐结果、固定 `conversation_id` 和下一步提示，然后停止；不要因为存在推荐结果就自动发送第二轮。
 - 用户下一次明确表达新意图后，才继续同一个 Cloud 会话。内部自动复用固定 `conversation_id`、生成新的 `outer_request_id`，并且不要求用户提供 Turn、任务 ID 或内部状态。
 - 用户要求将多个已展示模板分别制作成片时，只发送一次原始自然语言 `/make`；服务端负责创建一个 Command 和多个有序 Job。不要由 Debugger 拆成多次请求，也不要新建会话或重新上传素材。
+- 用户对已有成片要求换音乐时，继续原会话提交原话。当前服务端会排除当前模板并重新选择模板成片，不是在原视频上单独替换音轨；用户可见结论不得写成“已单独换音乐”。
+- 用户要求移动、交换或重排素材顺序时，继续原会话提交原话。当前服务端只做 Best-effort 重新成片，不能保证精确顺序；不得在 Debugger 本地编辑媒体或向用户承诺顺序已严格生效。
+- 上述非核心编辑返回视频后，必须同时展示非空 `feedback.message` 并请用户确认效果。可以说明后续随 Agent 或组织逻辑版本迭代支持，但不得承诺具体版本或日期。
 - 用户要求取消当前制作时，对固定 `conversation_id` 调用 `/out/cloud/cancel`；不要只停止本地 Poll，也不要重复取消已经终态的 Command。
 - 不把 HTTP 请求体、业务 code 或数据库字段暴露给普通用户；这些只在用户要求诊断或生成报告时使用。
 - 只有用户明确要求一次性执行多轮或自动化测试时，才允许在一次 Codex 任务中连续发送后续轮次；执行前先告知将自动创建几轮。
@@ -131,7 +134,7 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 | `429100` | 请求过于频繁 | 遵守 `Retry-After`；相同请求继续复用原 `outer_request_id` |
 | `500100` / `503xxx` | QA 服务暂时异常 | 仅对仍具幂等性的请求做有限重试，并保留原始请求标识 |
 
-正常响应也要按用户状态解释：推荐态返回“已生成可执行方案，请告诉我下一步怎么调整”，视频完成返回“成片创作完成”；不要把 `current_node_description` 和 `feedback.message` 无条件拼成一段话。
+正常响应也要按用户状态解释：推荐态返回“已生成可执行方案，请告诉我下一步怎么调整”；普通视频完成返回“成片创作完成”。视频完成但 `feedback.message` 非空时，先展示成片链接，再单独展示该能力边界说明并请用户确认效果；不要把 `current_node_description` 和 `feedback.message` 无条件拼成一段话，也不要省略非空反馈。换音乐不得表述为单独替换音轨，素材顺序调整不得表述为精确重排成功。
 
 推荐结果中的 `template_recommendations` 必须面向用户展示为简洁列表。每一项只展示模板标题和公开的预览链接；服务端字段 `preview_url`（如内部对象映射为 `previewUrl`）只用于读取地址，绝不能作为用户可见的链接文字或标签。链接文字必须固定为“点击查看模板效果”，例如：
 
