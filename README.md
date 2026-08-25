@@ -8,6 +8,8 @@
 
 当前 QA Skill 版本为 `v1.5.0-qa.5`。它与正式用户交互保持一致，唯一固定差异是请求目标为 QA 环境；同时保留常见错误提示规则，并将模板推荐以 `title + previewUrl` 可点击列表展示。
 
+多轮推荐规则：用户可以在同一 `conversation_id` 下用自然语言请求更多模板或推荐；每轮使用新的 `outer_request_id`，服务端通过推荐缓存排除已经展示过的候选。Debugger 只展示服务端返回的 `title` 和 `preview_url`，不自行选择、补足或伪造模板。
+
 ## 环境边界
 
 Skill 固定使用：
@@ -84,6 +86,8 @@ conversation_id: <qa-conversation-id>
 只执行首轮，Poll 到终态后停止，不要自动发送第二轮。
 返回首轮结果和 conversation_id，等待我的下一条自然语言指令。
 ```
+
+需要继续时，可在同一 `conversation_id` 下说“再给一些模板”“这些都不满意”等，验证服务端推荐缓存避重和后续模板确认。
 
 所有本地图片和视频都统一调用 `/upload/init`，使用返回的单对象临时凭证交给腾讯云 COS SDK 上传，再调用 `/upload/complete` 获取 `/make` 所需 URL。Skill 不按文件大小分支；SDK 可在内部选择单 PUT 或分片。素材字节不经过 `https://medi-qa.fireflyfusion.cn` 网关，临时凭证不得打印或落盘。原 `/upload` 仅用于旧客户端兼容诊断。
 

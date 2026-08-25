@@ -328,7 +328,7 @@ Poll is the customer-facing current-Turn result. For `outcome=video`, it returns
 
 ### Recommendation completion and continuation
 
-When `outcome=recommendation` and `execution_readiness=NEED_USER_INPUT`, present `feedback`, `recommendations`, and `template_recommendations`, then forward the user's next message unchanged. For user-facing rendering, map each template recommendation to a compact list item containing only `title` and `previewUrl` (source field `preview_url`); render a non-empty `preview_url` as a clickable Markdown “预览视频” link. Do not expose `template_code`, internal scores, or database fields unless the operator explicitly asks for raw diagnostics. If `preview_url` is empty, show “暂无预览” and never fabricate a URL.
+When `outcome=recommendation` and `execution_readiness=NEED_USER_INPUT`, present `feedback`, `recommendations`, and `template_recommendations`, then forward the user's next message unchanged. If the user asks for more templates or says the candidates are unsatisfactory, submit that original text as another Turn with the fixed `conversation_id`, no `assets`, and a new `outer_request_id`; do not select or fabricate candidates locally. The service may classify this as `request_more_templates` and use its recommendation cache to exclude already exposed templates. For user-facing rendering, map each returned template recommendation to a compact list item containing only `title` and `previewUrl` (source field `preview_url`); render a non-empty `preview_url` as a clickable Markdown “点击查看模板效果” link. Show only the service-returned batch, normally 3–5 items, and never expose `template_code`, internal scores, or database fields unless the operator explicitly asks for raw diagnostics. If `preview_url` is empty, show “暂无预览” and never fabricate a URL.
 
 ```json
 {
@@ -338,7 +338,7 @@ When `outcome=recommendation` and `execution_readiness=NEED_USER_INPUT`, present
 }
 ```
 
-The same protocol also applies after a completed video, failure, or cancellation. The user may keep changing templates, style, pacing, copy, aspect ratio, or another video-production requirement. The service accepts a later Turn only when the current Turn is `completed`, `failed`, or `cancelled`; `queued`/`running` concurrency returns `409106`. Every intentional Turn uses a new `outer_request_id`, while an ambiguous retry of the same Turn reuses the same value and body.
+The same protocol also applies after a completed video, failure, or cancellation. The user may keep changing templates, ask for more recommendations, or change style, pacing, copy, aspect ratio, or another video-production requirement. The service accepts a later Turn only when the current Turn is `completed`, `failed`, or `cancelled`; `queued`/`running` concurrency returns `409106`. Every intentional Turn uses a new `outer_request_id`, while an ambiguous retry of the same Turn reuses the same value and body. Do not impose a local two-turn limit; honor the server's action-specific continuation policy.
 
 ### Failed response
 

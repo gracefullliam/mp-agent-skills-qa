@@ -136,11 +136,15 @@ The first `/make` response creates one fixed public `conversation_id`. After the
 ```markdown
 ### 可选模板
 
-1. **全力以赴的快乐** — [预览视频](https://example.com/template-preview.mp4)
-2. **小棉袄** — [预览视频](https://example.com/template-preview-2.mp4)
+1. **全力以赴的快乐** — [点击查看模板效果](https://example.com/template-preview.mp4)
+2. **小棉袄** — [点击查看模板效果](https://example.com/template-preview-2.mp4)
 ```
 
 不要只说“模板候选包括……”，也不要把 `template_code`、内部评分或数据库字段塞进普通用户列表。`preview_url` 为空时不生成假链接，保留标题并标注“暂无预览”。如果用户明确要求原始字段，再额外返回 `title` 和 `previewUrl` 对应值。
+
+用户要求更多模板时，继续使用同一会话提交原话；返回新批次后仍只展示标题和“点击查看模板效果”，并等待用户下一步。
+
+If the user asks for more templates or more recommendations (for example, “再给一些模板”“这些都不满意”“还有别的吗”), forward the original text as a new Turn with the fixed `conversation_id`, no `assets`, and a new `outer_request_id`. The service classifies the request as `request_more_templates` and uses its recommendation cache to avoid previously exposed templates. Do not choose a template, upload media, or construct candidates locally for this action. Repeat only while the service accepts the continuation; do not impose a local two-turn limit.
 
 ### Diagnose Webhooks
 
